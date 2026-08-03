@@ -1,0 +1,49 @@
+# ---------------------------------------------------------------------------
+# Perch Runway
+# ---------------------------------------------------------------------------
+
+# Config — contains DB credentials, license key and secrets.
+# (Perch's admin folder has been renamed from "perch" to "admin".)
+/admin/config/config.php
+/admin/config/config.production.php
+
+# User-uploaded assets and generated resources
+/admin/resources/*
+!/admin/resources/.gitkeep
+
+# Perch backups and logs
+/admin/backup/
+/admin/setup/
+
+# ---------------------------------------------------------------------------
+# Secrets & credentials
+# ---------------------------------------------------------------------------
+/secrets.php
+/service-account.json
+.env
+.env.*
+*.pem
+*.key
+.htpasswd
+
+# ---------------------------------------------------------------------------
+# Dependencies
+# ---------------------------------------------------------------------------
+/vendor/
+
+# ---------------------------------------------------------------------------
+# Logs & temp
+# ---------------------------------------------------------------------------
+error_log
+*.log
+/IMPORT/
+
+# ---------------------------------------------------------------------------
+# OS / editor
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.nova/
+.idea/
+.vscode/
+*.swp

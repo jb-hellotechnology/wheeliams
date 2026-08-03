@@ -1,0 +1,23 @@
+<section>
+<perch:form id="supplier_contact_delete" app="wheeliams" method="post" class="flow">
+
+	<header>
+		<h2>Delete Contact</h2>
+	</header>
+	
+	<article>
+		<p><perch:forms id="email" /></p>
+		<perch:success>
+			<p class="alert success">Contact deleted | <a href="/settings/suppliers/?edit=1&id=<perch:forms id="supplierID" />">Continue</a></p>
+		</perch:success>
+	</article>
+	
+	<footer>
+		<perch:input type="submit" value="Delete" class="button warning" />
+	</footer>
+	
+	<perch:input type="hidden" id="wheeliams_supplierID" />
+	<perch:input type="hidden" id="type" />
+	
+</perch:form>
+</section>

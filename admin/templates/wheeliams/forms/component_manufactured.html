@@ -1,0 +1,162 @@
+<section>
+<perch:form id="component" app="wheeliams" method="post" class="flow fixed-submit">
+
+	<header>
+		<h2>Manufactured Component</h2>
+	</header>
+	
+	<article>
+		<div>
+			<perch:label for="part_no_prefix">Part No. Prefix</perch:label>
+			<perch:input type="select" id="part_no_prefix" options="<perch:forms id="values-part_no_prefix">" />
+		</div>
+		
+		<div>
+			<perch:label for="component_type">Component Type</perch:label>
+			<perch:input type="select" id="component_type" options="<perch:forms id="values-component_type">" />
+		</div>
+		
+		<div>
+			<perch:label for="part_issue_code">Part Issue Code</perch:label>
+			<perch:input type="select" id="part_issue_code" options="<perch:forms id="values-part_issue_code">" />
+		</div>
+		
+		<div>
+			<perch:label for="part_issue_description">Part Issue Description</perch:label>
+			<perch:input type="text" id="part_issue_description" />
+		</div>
+		
+		<div>
+			<perch:label for="part_issue_reason">Part Issue Reason</perch:label>
+			<perch:input type="text" id="part_issue_reason" />
+		</div>
+		
+		<div>
+			<perch:label for="part_description">Part Description</perch:label>
+			<perch:input type="text" id="part_description" />
+		</div>
+		
+		<div>
+			<perch:label for="issue_date">Issue Date</perch:label>
+			<perch:input type="date" id="issue_date" />
+		</div>
+		
+		<div>
+			<perch:label for="part_status_code">Part Status Code</perch:label>
+			<perch:input type="select" id="part_status_code" options="<perch:forms id="values-part_status_code">" />
+		</div>
+		
+		<div>
+			<perch:label for="product_group">Product Group</perch:label>
+			<perch:input type="select" id="product_group" options="<perch:forms id="values-product_group_description">" />
+		</div>
+		
+		<div>
+			<perch:label for="vehicle">Vehicle</perch:label>
+			<perch:input type="select" id="vehicle" name="vehicle[]" multiple options="<perch:forms id="values-vehicle">" />
+		</div>
+		
+		<div>
+			<perch:label for="product_short_code">Product Short Code</perch:label>
+			<perch:input type="text" id="product_short_code" />
+		</div>
+		
+		<div>
+			<perch:label for="process_type">Process Type</perch:label>
+			<perch:input type="select" id="process_type" multiple options="<perch:forms id="values-process_type">" />
+		</div>
+		
+		<div>
+			<perch:label for="generic_material">Generic Material</perch:label>
+			<perch:input type="select" id="generic_material" options="<perch:forms id="values-generic_material">" />
+		</div>
+		
+		<div>
+			<perch:label for="unit_of_measure">Unit of Measure</perch:label>
+			<perch:input type="select" id="unit_of_measure" options="<perch:forms id="values-unit_of_measure">" value="EA" />
+		</div>
+		
+		<div>
+			<perch:label for="maximum_stock_level">Maximum Stock Level</perch:label>
+			<perch:input type="number" id="maximum_stock_level" min="0" max="10000" />
+		</div>
+		
+		<div>
+			<perch:label for="reorder_quantity">Reorder Quantity</perch:label>
+			<perch:input type="number" id="reorder_quantity" min="0" max="10000" />
+		</div>
+		
+		<div>
+			<perch:label for="batch_rounding_quantity">Batch Rounding Quantity</perch:label>
+			<perch:input type="number" id="batch_rounding_quantity" min="0" max="10000" />
+		</div>
+		
+		<div>
+			<perch:label for="released_to_production">Released To Production</perch:label>
+			<perch:input type="select" id="released_to_production" options="No,Yes" />
+		</div>
+		
+		<div>
+			<perch:label for="released_to_production_date">Released To Production Date</perch:label>
+			<perch:input type="date" id="released_to_production_date" />
+		</div>
+		
+		<div>
+			<perch:label for="released_to_production_by">Released To Production By</perch:label>
+			<perch:input type="select" id="released_to_production_by" options=",<perch:forms id="values-members">" />
+		</div>
+		
+		<div>
+			<perch:label for="made_saleable">Made Saleable</perch:label>
+			<perch:input type="select" id="made_saleable" options="No,Yes" />
+		</div>
+		
+		<div>
+			<perch:label for="made_saleable_date">Made Saleable Date</perch:label>
+			<perch:input type="date" id="made_saleable_date" />
+		</div>
+		
+		<div>
+			<perch:label for="made_saleable_by">Made Saleable By</perch:label>
+			<perch:input type="select" id="made_saleable_by" options=",<perch:forms id="values-members">" />
+		</div>
+		
+		<div>
+			<perch:label for="product_on_website">Product On Website</perch:label>
+			<perch:input type="select" id="product_on_website" options="No,Yes" />
+		</div>
+		
+		<div>
+			<perch:label for="product_added_to_website">Product Added To Website Date</perch:label>
+			<perch:input type="date" id="product_added_to_date" />
+		</div>
+		
+		<div>
+			<perch:label for="product_added_to_website_by">Product Added To Website By</perch:label>
+			<perch:input type="select" id="product_added_to_website_by" options=",<perch:forms id="values-members">" />
+		</div>
+		
+		<div>
+			<perch:label for="general_notes">General Notes</perch:label>
+			<perch:input type="text" id="general_notes" />
+		</div>
+		
+		<div>
+			<perch:label for="supplier_notes">Supplier Notes</perch:label>
+			<perch:input type="text" id="supplier_notes" />
+		</div>
+		
+		<perch:success>
+			<p class="alert success">Success | <a href="/components/?type=<perch:forms id="type" />">Add another component</a> | <a href="/components/">Back to menu</a></p>
+		</perch:success>
+	</article>
+	
+	<footer>
+		<perch:input type="submit" value="Save" class="button primary" />
+	</footer>
+	
+	<perch:input type="hidden" id="wheeliams_componentID" />
+	<perch:input type="hidden" id="type" />
+	
+</perch:form>
+</section>

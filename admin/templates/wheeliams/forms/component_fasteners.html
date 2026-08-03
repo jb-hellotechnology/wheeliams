@@ -1,0 +1,112 @@
+<section>
+<perch:form id="component" app="wheeliams" method="post" class="flow fixed-submit">
+
+	<header>
+		<h2>Fastener Component</h2>
+	</header>
+	
+	<article>
+		<div>
+			<perch:label for="fastener_type">Fastener Type</perch:label>
+			<perch:input type="select" id="fastener_type" options="<perch:forms id="values-fastener_type">" />
+		</div>
+		
+		<div>
+			<perch:label for="thread_size">Thread Size</perch:label>
+			<perch:input type="select" id="thread_size" options="<perch:forms id="values-thread_size">" />
+		</div>
+		
+		<div>
+			<perch:label for="length">Length</perch:label>
+			<perch:input type="text" id="length" />
+		</div>
+		
+		<div>
+			<perch:label for="head_type">Head Type</perch:label>
+			<perch:input type="select" id="head_type" options="<perch:forms id="values-head_type">" />
+		</div>
+		
+		<div>
+			<perch:label for="fastener_grade">Fastener Grade</perch:label>
+			<perch:input type="select" id="fastener_grade" options="<perch:forms id="values-fastener_grade">" />
+		</div>
+		
+		<div>
+			<perch:label for="fastener_finish">Fastener Finish</perch:label>
+			<perch:input type="select" id="fastener_finish" options="<perch:forms id="values-fastener_finish">" />
+		</div>
+		
+		<div>
+			<perch:label for="unit_of_measure">Unit of Measure</perch:label>
+			<perch:input type="select" id="unit_of_measure" options="<perch:forms id="values-unit_of_measure">" value="EA" />
+		</div>
+
+		<div>
+			<perch:label for="maximum_stock_level">Maximum Stock Level</perch:label>
+			<perch:input type="number" id="maximum_stock_level" min="0" max="10000" />
+		</div>
+		
+		<div>
+			<perch:label for="reorder_quantity">Reorder Quantity</perch:label>
+			<perch:input type="number" id="reorder_quantity" min="0" max="10000" />
+		</div>
+		
+		<div>
+			<perch:label for="batch_rounding_quantity">Batch Rounding Quantity</perch:label>
+			<perch:input type="number" id="batch_rounding_quantity" min="0" max="10000" />
+		</div>
+		
+		<div>
+			<perch:label for="made_saleable">Made Saleable</perch:label>
+			<perch:input type="select" id="made_saleable" options="No,Yes" />
+		</div>
+		
+		<div>
+			<perch:label for="made_saleable_date">Made Saleable Date</perch:label>
+			<perch:input type="date" id="made_saleable_date" />
+		</div>
+		
+		<div>
+			<perch:label for="made_saleable_by">Made Saleable By</perch:label>
+			<perch:input type="select" id="made_saleable_by" options=",<perch:forms id="values-members">" />
+		</div>
+		
+		<div>
+			<perch:label for="product_on_website">Product On Website</perch:label>
+			<perch:input type="select" id="product_on_website" options="No,Yes" />
+		</div>
+		
+		<div>
+			<perch:label for="product_added_to_website">Product Added To Website Date</perch:label>
+			<perch:input type="date" id="product_added_to_date" />
+		</div>
+		
+		<div>
+			<perch:label for="product_added_to_website_by">Product Added To Website By</perch:label>
+			<perch:input type="select" id="product_added_to_website_by" options=",<perch:forms id="values-members">" />
+		</div>
+		
+		<div>
+			<perch:label for="general_notes">General Notes</perch:label>
+			<perch:input type="text" id="general_notes" />
+		</div>
+		
+		<div>
+			<perch:label for="supplier_notes">Supplier Notes</perch:label>
+			<perch:input type="text" id="supplier_notes" />
+		</div>
+		
+		<perch:success>
+			<p class="alert success">Success | <a href="/components/?type=<perch:forms id="type" />">Add another component</a> | <a href="/components/">Back to menu</a></p>
+		</perch:success>
+	</article>
+	
+	<footer>
+		<perch:input type="submit" value="Save" class="button primary" />
+	</footer>
+	
+	<perch:input type="hidden" id="wheeliams_componentID" />
+	<perch:input type="hidden" id="type" />
+	
+</perch:form>
+</section>

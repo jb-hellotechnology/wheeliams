@@ -1,0 +1,30 @@
+<section>
+<perch:form id="delete_component" app="wheeliams" method="post" class="flow">
+
+	<header>
+		<h2>Delete</h2>
+	</header>
+	
+	<article class="flow">
+		<perch:forms id="dynamicFields" html />
+		<perch:if exists="usedInBoms">
+			<h2>Used in BOMs:</h2>
+			<perch:forms id="usedInBoms" html />
+			<p>You need to remove this item from the above BOMs before you can delete it.</p>
+		</perch:if>
+		<perch:success>
+			<p class="alert success">Component deleted | <a href="/components/">Back to Main Component Menu</a> | <a href="/components/?type=<perch:forms id="type">">Back to <perch:forms id="type_title"></a></p>
+		</perch:success>
+	</article>
+	
+	<footer>
+		<perch:if exists="deletable">
+			<a href="<perch:forms id="cancel_link">" class="button primary">Exit without Deleting</a> <perch:input type="submit" value="Confirm Deletion" class="button warning" confirm('Are you sure?'); />
+		</perch:if>
+	</footer>
+	
+	<perch:input type="hidden" id="wheeliams_componentID" />
+	<perch:input type="hidden" id="type" />
+	
+</perch:form>
+</section>

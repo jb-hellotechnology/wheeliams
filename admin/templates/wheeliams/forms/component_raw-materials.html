@@ -1,0 +1,77 @@
+<section>
+<perch:form id="component" app="wheeliams" method="post" class="flow fixed-submit">
+
+	<header>
+		<h2>Raw Material</h2>
+	</header>
+	
+	<article>
+		<div>
+			<perch:label for="section">Section</perch:label>
+			<perch:input type="text" id="section" />
+		</div>
+		
+		<div>
+			<perch:label for="size">Size</perch:label>
+			<perch:input type="text" id="size" />
+		</div>
+		
+		<div>
+			<perch:label for="stock-length">Stock Length</perch:label>
+			<perch:input type="text" id="stock-length" />
+		</div>
+		
+		<div>
+			<perch:label for="generic-material">Generic Material</perch:label>
+			<perch:input type="select" id="generic-material" options="<perch:forms id="values-generic_material">" />
+		</div>
+		
+		<div>
+			<perch:label for="mass_per_unit_length">Mass Per Unit Length (KG)</perch:label>
+			<perch:input type="number" id="mass_per_unit_length" />
+		</div>
+		
+		<div>
+			<perch:label for="unit_of_measure">Unit of Measure</perch:label>
+			<perch:input type="select" id="unit_of_measure" options="<perch:forms id="values-unit_of_measure">" />
+		</div>
+
+		<div>
+			<perch:label for="maximum_stock_level">Maximum Stock Level</perch:label>
+			<perch:input type="number" id="maximum_stock_level" min="0" max="10000" />
+		</div>
+		
+		<div>
+			<perch:label for="reorder_quantity">Reorder Quantity</perch:label>
+			<perch:input type="number" id="reorder_quantity" min="0" max="10000" />
+		</div>
+		
+		<div>
+			<perch:label for="batch_rounding_quantity">Batch Rounding Quantity</perch:label>
+			<perch:input type="number" id="batch_rounding_quantity" min="0" max="10000" />
+		</div>
+		
+		<div>
+			<perch:label for="general_notes">General Notes</perch:label>
+			<perch:input type="text" id="general_notes" />
+		</div>
+		
+		<div>
+			<perch:label for="supplier_notes">Supplier Notes</perch:label>
+			<perch:input type="text" id="supplier_notes" />
+		</div>
+		
+		<perch:success>
+			<p class="alert success">Success | <a href="/components/?type=<perch:forms id="type" />">Add another component</a> | <a href="/components/">Back to menu</a></p>
+		</perch:success>
+	</article>
+	
+	<footer>
+		<perch:input type="submit" value="Save" class="button primary" />
+	</footer>
+	
+	<perch:input type="hidden" id="wheeliams_componentID" />
+	<perch:input type="hidden" id="type" />
+	
+</perch:form>
+</section>

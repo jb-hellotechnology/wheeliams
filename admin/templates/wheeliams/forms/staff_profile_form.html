@@ -1,0 +1,50 @@
+<section>
+<perch:form id="staff_profile" app="wheeliams" method="post" class="flow">
+
+	<header>
+		<h2>Staff Profile</h2>
+	</header>
+	
+	<article>
+		<div>
+			<perch:label for="name">Name</perch:label>
+			<perch:input type="text" id="name" />
+		</div>
+		<div>
+			<perch:label for="email">Email</perch:label>
+			<perch:input type="text" id="email" />
+		</div>
+		<div>
+			<perch:label for="phone">Phone</perch:label>
+			<perch:input type="text" id="phone" />
+		</div>
+		<div>
+			<perch:label for="address">Address</perch:label>
+			<perch:input type="text" id="address" />
+		</div>
+		<div>
+			<perch:label for="startDate">Start Date</perch:label>
+			<perch:input type="date" id="startDate" />
+		</div>
+		<div>
+			<perch:label for="holidayAllowance">Holiday Allowance</perch:label>
+			<perch:input type="number" id="holidayAllowance" step="0.5" />
+		</div>
+		<div>
+			<perch:label for="notes">Notes</perch:label>
+			<perch:input type="textarea" id="notes" />
+		</div>
+		
+		<perch:success>
+			<p class="alert success">Staff profile updated.</p>
+		</perch:success>
+	</article>
+	
+	<footer>
+		<perch:input type="submit" value="Update Profile" class="button primary" />
+	</footer>
+	
+	<perch:input type="hidden" id="wheeliams_staffID" />
+	
+</perch:form>
+</section>

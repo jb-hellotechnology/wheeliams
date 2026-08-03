@@ -1,0 +1,25 @@
+<section>
+<perch:form id="delete_input_setting" app="wheeliams" method="post" class="flow">
+
+	<header>
+		<h2>Delete</h2>
+	</header>
+	
+	<article>
+		<p><perch:forms id="type" /><br />
+		<perch:forms id="dynamicFields" /><br />
+		<perch:forms id="timestamp" /></p>
+		<perch:success>
+			<p class="alert success">Input setting deleted | <a href="/settings/input-parameters/">Back to Input Parameters</a></p>
+		</perch:success>
+	</article>
+	
+	<footer>
+		<perch:input type="submit" value="Delete" class="button warning" />
+	</footer>
+	
+	<perch:input type="hidden" id="wheeliams_settings_inputID" />
+	<perch:input type="hidden" id="type" />
+	
+</perch:form>
+</section>

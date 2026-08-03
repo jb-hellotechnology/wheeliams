@@ -1,0 +1,83 @@
+<section>
+<perch:form id="component_file_add" app="wheeliams" method="post" class="flow">
+
+	<header>
+		<h2>Attach a File</h2>
+	</header>
+	
+	<article>
+		<div class="drag-and-drop" style="width:100%;height:100px;">
+			<label>Drop File Here</label>
+		</div>
+		<div>
+			<perch:input type="hidden" id="wheeliams_fileID" />
+			<perch:input id="fileType" value="COMPONENT" type="hidden">
+			<perch:input type="hidden" id="partCode" />
+		</div>
+		<perch:success>
+			<p class="alert success">File uploaded | <a href="/components/?type=<perch:forms id="type" />&edit=1&id=<perch:forms id="perch3_wheeliams_componentID" />">Continue</a></p>
+		</perch:success>
+	</article>
+	
+</perch:form>
+</section>
+
+<script>
+	document.addEventListener("DOMContentLoaded", function () {
+	  const dropZone = document.querySelector("#form2_component_file_add .drag-and-drop");
+	  const fileIDInput = document.getElementById("form2_wheeliams_fileID");
+	  const form = document.getElementById("form2_component_file_add");
+	
+	  if (!dropZone) return;
+	
+	  // Visual feedback
+	  dropZone.addEventListener("dragover", function (e) {
+		e.preventDefault();
+		dropZone.classList.add("drag-over");
+	  });
+	
+	  dropZone.addEventListener("dragleave", function () {
+		dropZone.classList.remove("drag-over");
+	  });
+	
+	  dropZone.addEventListener("drop", async function (e) {
+		e.preventDefault();
+		dropZone.classList.remove("drag-over");
+	
+		const file = e.dataTransfer.files[0];
+		if (!file) return;
+	
+		const type     = document.getElementById("form2_fileType").value;
+		const partCode = document.getElementById("form2_partCode").value;
+	
+		dropZone.querySelector("label").textContent = `Uploading: ${file.name}…`;
+	
+		const formData = new FormData();
+		formData.append("file", file);
+		formData.append("type", type);
+		formData.append("partCode", partCode);
+	
+		try {
+		  const response = await fetch("/upload_to_drive.php", {
+			method: "POST",
+			body: formData,
+		  });
+	
+		  const result = await response.json();
+	
+		  if (!response.ok || result.error) {
+			throw new Error(result.error || "Upload failed");
+		  }
+	
+		  // Populate the file ID and submit the form
+		  fileIDInput.value = result.fileId;
+		  dropZone.querySelector("label").textContent = `✓ Uploaded: ${file.name}`;
+		  form.submit();
+	
+		} catch (err) {
+		  dropZone.querySelector("label").textContent = `✗ Error: ${err.message}`;
+		  console.error(err);
+		}
+	  });
+	});
+</script>

@@ -1,0 +1,27 @@
+<section>
+<perch:form id="input_settings" app="wheeliams" method="post" class="flow">
+
+	<header>
+		<h2>Fastener Type</h2>
+	</header>
+	
+	<article>
+		<div>
+			<perch:label for="fastener">Fastener</perch:label>
+			<perch:input type="text" id="fastener" />
+		</div>
+		
+		<perch:success>
+			<p class="alert success">Success | <a href="/settings/input-parameters/?type=<perch:forms id="type" />">Enter Next Parameter</a> | <a href="/settings/input-parameters/">Exit to Parameters List</a></p>
+		</perch:success>
+	</article>
+	
+	<footer>
+		<perch:input type="submit" value="Save" class="button primary" />
+	</footer>
+	
+	<perch:input type="hidden" id="wheeliams_settings_inputID" />
+	<perch:input type="hidden" id="type" />
+	
+</perch:form>
+</section>

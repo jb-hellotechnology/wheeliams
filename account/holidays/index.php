@@ -1,0 +1,1 @@
+<?php include(str_replace('/', DIRECTORY_SEPARATOR, '../../admin/templates/pages/user_holidays.php')); ?>

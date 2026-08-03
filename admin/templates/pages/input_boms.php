@@ -1,0 +1,140 @@
+<?php if (!defined('PERCH_RUNWAY')) include($_SERVER['DOCUMENT_ROOT'].'/admin/runtime.php'); ?>
+<?php
+
+// ini_set('display_errors', 1);
+// ini_set('display_startup_errors', 1);
+// error_reporting(E_ALL);
+
+if(!perch_member_logged_in() OR !perch_member_has_tag('admin')){
+	header("location:/");
+}
+?>
+<?php
+perch_layout('header');
+?>
+<main class="full">
+	<p class="admin">Only Visible to Administrators</p>
+	<?php
+	$componentData = component($_GET['id']);
+	$bomData = bom($_GET['id']);
+	$type = $_GET['type'];
+	if($type){
+		if($_GET['edit']){
+			$json = json_decode($componentData['dynamicFields'],true);
+			echo "<h1>".$json['part_description']." (".$componentData['partCode'].")</h1>";
+		}else{
+			if($type=='manufactured'){
+				echo "<h1>Component BOMs</h1>";
+			}else{
+				echo "<h1>Kit BOMs</h1>";
+			}
+		}
+		
+		if(!$_GET['edit']){
+			/* TABLE OF ITEMS */
+			wheeliams_bom_table($type);
+		}else{
+			echo '<div class="split">';
+			echo '<div>';
+			
+			if($bomData){
+				echo '<section>';
+				echo '<header>BOM</header>';
+				echo '<article class="flow table-container">';
+				echo '<table>';
+				echo '<thead>';
+				echo '<th>Part Code</th><th>Description</th><th>Quantity</th><th>Edit</td><th>Delete</th>';
+				echo '</thead>';
+				foreach($bomData as $line){
+					$component = component($line['partCode']);
+					$componentJson = json_decode($component['dynamicFields'], true);
+					$uom = $componentJson['unit_of_measure'];
+					echo '<tr>';
+					echo '<td><a href="/components/?type='.$component['type'].'&edit=1&id='.$component['perch3_wheeliams_componentID'].'">'.$component['partCode'].'</a></td>';
+					echo '<td>'.$componentJson['part_description'].'</td>';
+					echo '<td>'.$line['quantity'].' '.$uom.'</td>';
+					echo '<td>';
+					echo '<a href="/boms/component/?type='.$_GET['type'].'&edit=1&id='.$line['id'].'&component='.$line['perch3_wheeliams_bomID'].'">Edit</a>';
+					// PerchSystem::set_var('bomID', $line['perch3_wheeliams_bomID']);
+					// PerchSystem::set_var('partCode', $componentData['partCode']);
+					// PerchSystem::set_var('quantity', $line['quantity']);
+					// wheeliams_form('bom_edit_row.html');
+					echo '</td>';
+					echo '<td>';
+					PerchSystem::set_var('component', $line['perch3_wheeliams_bomID']);
+					wheeliams_form('bom_delete_row.html');
+					// echo '<a href="/boms/component/?&type='.$_GET['type'].'&delete=1&id='.$line['id'].'&component='.$line['perch3_wheeliams_bomID'].'">Delete</a>';
+					//wheeliams_form('bom_delete_row.html');
+					echo '</td>';
+					echo '</tr>';
+				}
+				echo '</table>';
+				echo '</article>';
+				echo '</section>';
+			}
+		}
+		PerchSystem::set_var('bomID', '');
+		PerchSystem::set_var('partCode', '');
+		PerchSystem::set_var('quantity', '');
+		
+		/* ADD NEW ITEM OF TYPE */
+		
+		/* LIST ITEMS OF TYPE WITH EDIT/DELETE OPTIONS */
+		if($_GET['edit']){
+			/* FILES */
+			wheeliams_form('bom_raw-materials.html');
+			if($_GET['type']=='products'){
+				wheeliams_form('bom_fasteners.html');
+				wheeliams_form('bom_components.html');
+			}
+			echo '</div>';
+			echo '<div>';
+			
+			wheeliams_form('bom_notes.html');
+
+			PerchSystem::set_var('partCode', $componentData['partCode']);
+			
+			if($type=='products'){
+				echo '<section class="">';
+				echo '<header>';
+				echo '<h2>Files</h2>';
+				echo '</header>';
+				echo '<article>';
+				echo '<div id="product-files">
+				<div id="product-files-list"></div>
+				</div>';
+				echo '<script>loadProductFiles("'.$componentData['partCode'].'", "KIT");</script>';
+				echo '</article>';
+				echo '</section>';
+				wheeliams_form('bom_file_add-'.$_GET['type'].'.html');
+			}
+
+			echo '</div>';
+			echo '<div>';
+			/* UPDATE HISTORY HERE */
+			//wheeliams_component_changelog($_GET['type'],$_GET['id']);
+		}else{
+			
+		}
+		if($_GET['edit']){
+			echo '<p><a href="/boms/?type='.$_GET['type'].'" class="button back">&larr; Back</a></p>';
+		}
+	
+	}else{
+	?>
+	<h1>Configure BOMs</h1>
+	<div class="option-grid">
+		<div class="option-card">
+			<h2><a href="/boms?type=manufactured">Components</a></h2>
+		</div>
+		<div class="option-card">
+			<h2><a href="/boms?type=products">Kits</a></h2>
+		</div>
+	</div>
+	<?php
+	}
+	?>
+</main>
+<?php
+perch_layout('footer');
+?>

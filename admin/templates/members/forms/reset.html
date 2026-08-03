@@ -1,0 +1,17 @@
+<perch:form id="reset" method="post" app="perch_members">
+	<article class="flow">
+		<perch:success>
+			<p class="alert success">A new password has been emailed to you.</p>
+		</perch:success>
+		<div>
+			<perch:label for="email">Enter your email address and we'll send you a new password</perch:label>
+			<perch:input type="email" id="email" required="true" label="Email" placeholder="you@company.com" helper="PerchMembers_Members::check_email_exists" />
+			<perch:error for="email" type="required">Please add your email address</perch:error>
+			<perch:error for="email" type="helper"><p>We don't have an account with that email address.</p></perch:error>
+		</div>
+	</article>
+	<footer>
+		<perch:input type="submit" value="Reset" class="button primary" />
+	</footer>
+
+</perch:form>

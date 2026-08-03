@@ -1,0 +1,41 @@
+<section>
+<perch:form id="supplier_contact_edit" app="wheeliams" method="post" class="flow">
+
+	<header>
+		<h2>Update a Contact</h2>
+	</header>
+	
+	<article>
+		<div>
+			<perch:label for="first_name">First Name</perch:label>
+			<perch:input type="text" id="first_name" />
+		</div>
+		<div>
+			<perch:label for="last_name">Last Name</perch:label>
+			<perch:input type="text" id="last_name" />
+		</div>
+		<div>
+			<perch:label for="phone">Phone</perch:label>
+			<perch:input type="text" id="phone" />
+		</div>
+		<div>
+			<perch:label for="email">Email</perch:label>
+			<perch:input type="email" id="email" required />
+		</div>
+		<div>
+			<perch:label for="contact_type">Contact Type</perch:label>
+			<perch:input type="select" id="contact_type" options="<perch:forms id="contact_types">" value="<perch:forms id="contact_type" />" />
+		</div>
+		<perch:success>
+			<p class="alert success">Contact updated | <a href="/settings/suppliers/?edit=1&id=<perch:forms id="wheeliams_supplierID" />">Continue</a></p>
+		</perch:success>
+	</article>
+	
+	<footer>
+		<perch:input type="submit" value="Update" class="button primary" />
+		<perch:input type="hidden" id="contactID" />
+		<perch:input type="hidden" id="wheeliams_supplierID" />
+	</footer>
+	
+</perch:form>
+</section>

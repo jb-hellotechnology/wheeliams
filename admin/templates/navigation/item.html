@@ -1,0 +1,17 @@
+<perch:before>
+    <ul class="main-nav">
+</perch:before>
+		<li<perch:if exists="current_page"> class="selected"</perch:if><perch:if exists="ancestor_page"> class="ancestor"</perch:if>>
+			<a href="<perch:pages id="pagePath" />">
+				<perch:if exists="icon">
+					<span class="material-symbols-outlined">
+						<perch:pages id="icon" />
+					</span>
+				</perch:if>
+	            <perch:pages id="pageNavText" />
+            </a>   
+            <perch:pages id="subitems" encode="false" />
+        </li>
+<perch:after>
+    </ul>
+</perch:after>

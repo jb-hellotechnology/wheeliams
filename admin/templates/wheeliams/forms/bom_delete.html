@@ -1,0 +1,25 @@
+<section>
+<perch:form id="delete_bom" app="wheeliams" method="post" class="flow">
+
+	<header>
+		<h2>Delete</h2>
+	</header>
+	
+	<article>
+		<p><perch:forms id="type" /><br />
+		<perch:forms id="dynamicFields" /><br />
+		<perch:forms id="timestamp" /></p>
+		<perch:success>
+			<p class="alert success">BOM deleted | <a href="/components/">Back to BOMs</a></p>
+		</perch:success>
+	</article>
+	
+	<footer>
+		<perch:input type="submit" value="Delete" class="button warning" />
+	</footer>
+	
+	<perch:input type="hidden" id="wheeliams_bomID" />
+	<perch:input type="hidden" id="type" />
+	
+</perch:form>
+</section>

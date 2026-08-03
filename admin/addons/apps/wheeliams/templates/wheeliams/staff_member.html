@@ -1,0 +1,19 @@
+<perch:nl id="jobDescription" type="textarea" html editor="redactor" divider-before="Job Description" />
+<perch:nl id="jobType" type="select" options="Full Time,Part Time" />
+<perch:nl id="department" type="select" label="Department" options=",Sales,Production,Dispatch,IT,Operations" />
+<perch:nl id="normalMonday" type="checkbox" value="yes" label="Works Mondays?" divider-before="Payroll Settings" />
+<perch:nl id="earlyWednesday" type="checkbox" value="yes" label="Apply Early Finish Friday to Following Wednesday?" />
+<perch:nl id="constrainDay" type="checkbox" value="on" label="Constrain Hours to Standard Day (08:30:00 to 17:00:00)" />
+<perch:nl id="wageType" type="select" options="Hourly,Salary" label="Wage Type" />
+<perch:nl id="holidayEntitlement" type="text" divider-before="Holiday Entitlement and Sick Pay" label="Holiday Entitlement" />
+<perch:nl id="totalAccrued" label="Total Accrued" type="text" />
+<perch:nl id="nextAccrual" label="Days Added at Next Accrual Date" type="text" />
+<perch:nl id="acrrualDate" label="Accrual Date" type="date" />
+<perch:nl id="sickDays" type="text" label="Sick Day Allowance" />
+<perch:nl id="compassionateDays" type="text" label="Compassionate Leave Allowance" />
+
+<perch:repeater id="hrconversations" divider-before="HR Conversations">
+	<perch:nl id="date" type="date" label="Date of Conversation" />
+	<perch:nl id="who" type="text" label="Who Talked with Staff Member" />
+	<perch:nl id="conversation" type="textarea" html editor="redactor" label="Content of Conversation" />
+</perch:repeater>

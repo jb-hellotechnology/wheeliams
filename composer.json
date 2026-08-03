@@ -1,0 +1,6 @@
+{
+    "require": {
+        "shopify/shopify-api": "^5.5",
+        "google/apiclient": "^2.15"
+    }
+}

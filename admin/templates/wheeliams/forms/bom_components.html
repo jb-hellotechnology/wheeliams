@@ -1,0 +1,31 @@
+<section>
+<perch:form id="bom_manufactured_add" app="wheeliams" method="post" class="flow">
+
+	<header>
+		<h2>Assign Component</h2>
+	</header>
+	
+	<article>
+		<div>
+			<perch:label for="component">Component</perch:label>
+			<perch:input type="select" id="component" class="select-2" options="<perch:forms id="values-components" />" />
+		</div>
+		<div>
+			<perch:label for="quantity">Quantity</perch:label>
+			<perch:input type="number" id="quantity_c" />
+		</div>
+		
+		<perch:success>
+			<p class="alert success">Success | <a href="/boms/?type=<perch:forms id="type" />&edit=1&id=<perch:forms id="itemID" />">Add another</a></p>
+		</perch:success>
+	</article>
+	
+	<footer>
+		<perch:input type="submit" value="Save" class="button primary" />
+	</footer>
+	
+	<perch:input type="hidden" id="wheeliams_bomID" value="<perch:forms id="itemID" />" />
+	<perch:input type="hidden" id="type" value="component" />
+	
+</perch:form>
+</section>

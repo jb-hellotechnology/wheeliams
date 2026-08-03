@@ -1,0 +1,24 @@
+<section>
+<perch:form id="bom_edit" app="wheeliams" method="post" class="flow">
+
+	<header>
+		<h2>Update: <perch:forms id="bomName" /></h2>
+	</header>
+	
+	<article>
+		<label><perch:forms id="partCode" /> <perch:forms id="partDescription" /></label>
+		<div>
+			<perch:label for="quantity">Quantity (<perch:forms id="uom" />)</perch:label>
+			<perch:input type="number" id="quantity" />
+		</div>
+		<perch:success>
+			<p class="alert success">BOM updated | <a href="/boms/?type=<perch:forms id="type" />&edit=1&id=<perch:forms id="id" />">Continue</a></p>
+		</perch:success>
+	</article>
+	
+	<footer>
+		<perch:input type="submit" value="Update" class="button primary" />
+		<perch:input type="hidden" id="wheeliams_bomID" value="<perch:forms id="perch3_wheeliams_bomID" />" />
+	</footer>
+</perch:form>
+</section>

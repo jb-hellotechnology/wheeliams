@@ -1,0 +1,22 @@
+<section>
+<perch:form id="duplicate_component" app="wheeliams" method="post" class="flow">
+
+	<header>
+		<h2>Copy</h2>
+	</header>
+	
+	<article class="flow">
+		<p>Create a copy of this component. After clicking the button below you will be redirected to the new version of this component.</p>
+	</article>
+	
+	<footer>
+		<perch:if exists="deletable">
+			<perch:input type="submit" value="Duplicate Component" class="button primary" confirm('Are you sure?'); />
+		</perch:if>
+	</footer>
+	
+	<perch:input type="hidden" id="wheeliams_componentID" />
+	<perch:input type="hidden" id="type" />
+	
+</perch:form>
+</section>

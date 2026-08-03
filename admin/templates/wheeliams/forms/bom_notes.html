@@ -1,0 +1,27 @@
+<section>
+<perch:form id="bom_notes" app="wheeliams" method="post" class="flow">
+
+	<header>
+		<h2>Notes</h2>
+	</header>
+	
+	<article>
+		<div>
+			<perch:label for="notes">Notes</perch:label>
+			<perch:input type="textarea" id="notes" />
+		</div>
+		
+		<perch:success>
+			<p class="alert success">Success | <a href="/boms/?type=<perch:forms id="type">&edit=1&id=<perch:forms id="bomID" />">Continue</a></p>
+		</perch:success>
+	</article>
+	
+	<footer>
+		<perch:input type="submit" value="Save" class="button primary" />
+	</footer>
+	
+	<perch:input type="hidden" id="bomID" />
+	<perch:input type="hidden" id="type" />
+	
+</perch:form>
+</section>

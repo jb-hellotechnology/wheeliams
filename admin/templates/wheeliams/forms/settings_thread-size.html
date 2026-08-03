@@ -1,0 +1,31 @@
+<section>
+<perch:form id="input_settings" app="wheeliams" method="post" class="flow">
+
+	<header>
+		<h2>Thread Size</h2>
+	</header>
+	
+	<article>
+		<div>
+			<perch:label for="size">Thread Size or Dia</perch:label>
+			<perch:input type="text" id="size" />
+		</div>
+		<div>
+			<perch:label for="standard">Standard Thread?</perch:label>
+			<perch:input type="select" id="standard" options="STD," />
+		</div>
+		
+		<perch:success>
+			<p class="alert success">Success | <a href="/settings/input-parameters/?type=<perch:forms id="type" />">Enter Next Parameter</a> | <a href="/settings/input-parameters/">Exit to Parameters List</a></p>
+		</perch:success>
+	</article>
+	
+	<footer>
+		<perch:input type="submit" value="Save" class="button primary" />
+	</footer>
+	
+	<perch:input type="hidden" id="wheeliams_settings_inputID" />
+	<perch:input type="hidden" id="type" />
+	
+</perch:form>
+</section>

@@ -1,0 +1,32 @@
+<section>
+<perch:form id="holiday_request" app="wheeliams" method="post" class="flow">
+
+	<header>
+		<h2>Request Holiday</h2>
+	</header>
+	
+	<article>
+		<div>
+			<perch:label for="start">First Day of Holiday</perch:label>
+			<perch:input type="date" id="start" />
+		</div>
+		
+		<div class="flow">
+			<perch:label for="end">Last Day of Holiday</perch:label>
+			<perch:input type="date" id="end" />
+			<perch:error for="all" type="end">
+				<p class="alert error">End date should be greater than start date</p>
+			</perch:error>
+		</div>
+		
+		<perch:success>
+			<p class="alert success">Your request has been logged and will be processed soon.</p>
+		</perch:success>
+	</article>
+	
+	<footer>
+		<perch:input type="submit" value="Submit Request" class="button primary" />
+	</footer>
+	
+</perch:form>
+</section>

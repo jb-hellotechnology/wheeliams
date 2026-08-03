@@ -1,0 +1,14 @@
+<perch:form id="component_supplier_price" app="wheeliams" method="post" class="flow simple">
+
+		<div>
+			<perch:label for="wheeliams_supplierID">Update Price</perch:label>
+			<perch:input type="text" id="price" value="<perch:form id="price">
+		</div>
+		<perch:success>
+			<p class="alert success">Price updated | <a href="/components/?type=<perch:forms id="type" />&edit=1&id=<perch:forms id="perch3_wheeliams_componentID" />">Continue</a></p>
+		</perch:success>
+
+		<perch:input type="submit" value="Update" class="button primary" />
+		<perch:input type="hidden" id="wheeliams_supplierID" />
+	
+</perch:form>
