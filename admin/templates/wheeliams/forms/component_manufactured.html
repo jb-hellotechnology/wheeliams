@@ -2,18 +2,18 @@
 <perch:form id="component" app="wheeliams" method="post" class="flow fixed-submit">
 
 	<header>
-		<h2>Manufactured Component</h2>
+		<h2>Manufactured & Purchased Components</h2>
 	</header>
 	
 	<article>
 		<div>
 			<perch:label for="part_no_prefix">Part No. Prefix</perch:label>
-			<perch:input type="select" id="part_no_prefix" options="<perch:forms id="values-part_no_prefix">" />
+			<perch:input type="select" id="part_no_prefix" options="<perch:forms id="values-part_no_prefix">" required />
 		</div>
 		
 		<div>
 			<perch:label for="component_type">Component Type</perch:label>
-			<perch:input type="select" id="component_type" options="<perch:forms id="values-component_type">" />
+			<perch:input type="select" id="component_type" options="<perch:forms id="values-component_type">" required />
 		</div>
 		
 		<div>
@@ -33,7 +33,7 @@
 		
 		<div>
 			<perch:label for="part_description">Part Description</perch:label>
-			<perch:input type="text" id="part_description" />
+			<perch:input type="text" id="part_description" required />
 		</div>
 		
 		<div>

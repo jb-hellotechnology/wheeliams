@@ -2,28 +2,28 @@
 <perch:form id="component" app="wheeliams" method="post" class="flow fixed-submit">
 
 	<header>
-		<h2>Raw Material</h2>
+		<h2>Raw Materials</h2>
 	</header>
 	
 	<article>
 		<div>
 			<perch:label for="section">Section</perch:label>
-			<perch:input type="text" id="section" />
+			<perch:input type="text" id="section" required />
 		</div>
 		
 		<div>
 			<perch:label for="size">Size</perch:label>
-			<perch:input type="text" id="size" />
+			<perch:input type="text" id="size" required />
 		</div>
 		
 		<div>
 			<perch:label for="stock-length">Stock Length</perch:label>
-			<perch:input type="text" id="stock-length" />
+			<perch:input type="text" id="stock-length" required />
 		</div>
 		
 		<div>
 			<perch:label for="generic-material">Generic Material</perch:label>
-			<perch:input type="select" id="generic-material" options="<perch:forms id="values-generic_material">" />
+			<perch:input type="select" id="generic-material" options="<perch:forms id="values-generic_material">" required />
 		</div>
 		
 		<div>

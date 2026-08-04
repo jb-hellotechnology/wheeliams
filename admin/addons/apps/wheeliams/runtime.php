@@ -59,10 +59,22 @@
 		}
 		if(substr($template,0,9)=='settings_'){
 			$data = $WheeliamsSettingsInput->setting($_GET['id']);
-			$data['type'] = $_GET['type'];
+			$dynamicFields = '<dl>';
+			$dynamicFields .= '<dt>Type</dt><dd>'.$_GET['type'].'</dd>';
 			foreach(json_decode($data['dynamicFields'],true) AS $key=>$value){
-				$data[$key] = $value;
+				if(is_array($value)){
+					$data[$key] = $value;
+				}else{
+					$data[$key] = $value;
+				}
+				if($data[$key]){
+					$dynamicFields .= '<dt>'.$key.'</dt><dd>'.$value.'</dd>';
+				}
 			}
+			$dynamicFields .= '</dl>';
+			$data['dynamicFields'] = $dynamicFields;
+			$data['type'] = $_GET['type'];
+			$data['cancel_link'] = "/settings/input-parameters/?type=".$_GET['type'];
 		}
 		if(substr($template,0,10)=='component_'){
 			$data = $WheeliamsComponents->component($_GET['id']);
@@ -141,6 +153,8 @@
 				$suppliers .= ",".$supplier['name']."|".$supplier['wheeliams_supplierID'];
 			}
 			$data['suppliers'] = $suppliers;
+			$data['type'] = $_GET['type'];
+			$data['id'] = $_GET['id'];
 		}
 		if(substr($template,0,4)=='bom_'){
 			$data['values-type'] = $_GET['type'];
@@ -332,22 +346,18 @@
 					}elseif($type=='fasteners'){
 						
 						$partCode = '';
-						$partCode .= $data['thread_size'];
-						if($data['length']){
-							$partCode .= 'x'.$data['length'].'-';
-						}
-						if($data['head_type']){
-							$partCode .= $data['head_type'].'-';
-						}
-						if(!$data['length'] && !$data['head_type']){
-							$partCode .= '-';
-						}
-						if($data['fastener_grade']){
-							$partCode .= $data['fastener_grade'].'-';
-						}
-						if($data['fastener_finish']){
-							$partCode .= $data['fastener_finish'];
-						}
+						
+						$has_length = !empty($data['length'])    && empty($data['no_length']);
+						$has_head   = !empty($data['head_type']) && empty($data['no_head']);
+						
+						$partCode  = $data['thread_size'];
+						$partCode .= $has_length ? 'x'.$data['length'] : '';
+						$partCode .= '-';
+						$partCode .= $has_head ? $data['head_type'].' ' : '';
+						$partCode .= $data['fastener_type'];
+						$partCode .= '-'.$data['fastener_grade'];
+						$partCode .= '-'.$data['fastener_finish'];
+						
 					}elseif($type=='raw-materials'){
 						$materials = explode("-", $data['generic-material']);
 						if(count($materials)>0){
@@ -533,9 +543,9 @@
 				case 'bom_manufactured_add':
 					$Session = PerchMembers_Session::fetch();
 					$WheeliamsBoms = new Wheeliams_Boms($API);
-					if($SubmittedForm->data['quantity_add_rm']){
+					if($SubmittedForm->data['quantity_add_rm'] !== ''){
 						$quantity = $SubmittedForm->data['quantity_add_rm'];
-					}elseif($SubmittedForm->data['quantity_c']){
+					}elseif($SubmittedForm->data['quantity_c'] !== ''){
 						$quantity = $SubmittedForm->data['quantity_c'];
 					}else{
 						$quantity = $SubmittedForm->data['quantity_f'];
@@ -547,7 +557,10 @@
 				case 'bom_edit':
 					$Session = PerchMembers_Session::fetch();
 					$WheeliamsBoms = new Wheeliams_Boms($API);
-					$WheeliamsBoms->updateBom($SubmittedForm->data['wheeliams_bomID'],$SubmittedForm->data['quantity'],$Session->get('memberID'));
+					if($SubmittedForm->data['quantity'] !== ''){
+						$quantity = $SubmittedForm->data['quantity'];
+					}
+					$WheeliamsBoms->updateBom($SubmittedForm->data['wheeliams_bomID'],$quantity,$Session->get('memberID'));
 				break;
 				
 				case 'bom_delete':
@@ -1259,7 +1272,7 @@
 					  time: { unit: 'day', tooltipFormat: 'dd MMM yyyy' }
 					},
 					y: {
-					  ticks: { callback: v => '£' + v }
+					  ticks: { callback: v => '£' + v.toLocaleString('en-GB', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) }
 					}
 				  }
 				}

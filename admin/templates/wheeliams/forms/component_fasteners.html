@@ -2,38 +2,40 @@
 <perch:form id="component" app="wheeliams" method="post" class="flow fixed-submit">
 
 	<header>
-		<h2>Fastener Component</h2>
+		<h2>Fasteners</h2>
 	</header>
 	
 	<article>
 		<div>
 			<perch:label for="fastener_type">Fastener Type</perch:label>
-			<perch:input type="select" id="fastener_type" options="<perch:forms id="values-fastener_type">" />
+			<perch:input type="select" id="fastener_type" options="<perch:forms id="values-fastener_type">" required />
 		</div>
 		
 		<div>
 			<perch:label for="thread_size">Thread Size</perch:label>
-			<perch:input type="select" id="thread_size" options="<perch:forms id="values-thread_size">" />
+			<perch:input type="select" id="thread_size" options="<perch:forms id="values-thread_size">" required />
 		</div>
 		
 		<div>
 			<perch:label for="length">Length</perch:label>
 			<perch:input type="text" id="length" />
+			<label class="checkbox-inline"><perch:input type="checkbox" id="no_length" value="1" /> No Length</label>
 		</div>
-		
+
 		<div>
 			<perch:label for="head_type">Head Type</perch:label>
 			<perch:input type="select" id="head_type" options="<perch:forms id="values-head_type">" />
+			<label class="checkbox-inline"><perch:input type="checkbox" id="no_head" value="1" /> No Head</label>
 		</div>
 		
 		<div>
 			<perch:label for="fastener_grade">Fastener Grade</perch:label>
-			<perch:input type="select" id="fastener_grade" options="<perch:forms id="values-fastener_grade">" />
+			<perch:input type="select" id="fastener_grade" options="<perch:forms id="values-fastener_grade">" required />
 		</div>
 		
 		<div>
 			<perch:label for="fastener_finish">Fastener Finish</perch:label>
-			<perch:input type="select" id="fastener_finish" options="<perch:forms id="values-fastener_finish">" />
+			<perch:input type="select" id="fastener_finish" options="<perch:forms id="values-fastener_finish">" required />
 		</div>
 		
 		<div>
@@ -109,4 +111,28 @@
 	<perch:input type="hidden" id="type" />
 	
 </perch:form>
+
+<script>
+(function () {
+	// Pair each "No …" checkbox with the field it disables.
+	var pairs = [
+		{ toggle: 'no_length', target: 'length' },
+		{ toggle: 'no_head',   target: 'head_type' }
+	];
+
+	pairs.forEach(function (pair) {
+		var toggle = document.querySelector('[name="' + pair.toggle + '"]');
+		var target = document.querySelector('[name="' + pair.target + '"]');
+		if (!toggle || !target) return;
+
+		function sync() {
+			target.disabled = toggle.checked;
+			target.style.opacity = toggle.checked ? 0.4 : '';
+		}
+
+		toggle.addEventListener('change', sync);
+		sync(); // apply on load (handles the edit view)
+	});
+})();
+</script>
 </section>

@@ -220,7 +220,7 @@ class PerchAPI_SubmittedForm
 
         			        // Pattern
         			        if ($Tag->pattern()) {
-        			            if (!filter_var($val, FILTER_VALIDATE_REGEXP, array("options"=>array("regexp"=>'/^'.$Tag->pattern().'$/')))) {
+        			            if (filter_var($val, FILTER_VALIDATE_REGEXP, array("options"=>array("regexp"=>'/^'.$Tag->pattern().'$/'))) === false) {
 			                        $valid = false;
 			                        $Perch->log_form_error($this->formID, $Tag->id(), 'format');
 			                    }

@@ -94,7 +94,7 @@ class Wheeliams_Components extends PerchAPI_Factory
 		$dataset = '';
 		foreach($data as $row){
 			$timestamp = explode(" ", $row['timestamp']);
-			$dataset .= '{ timestamp: \''.$timestamp[0].'\', price: '.$row['price'].' },';
+			$dataset .= '{ timestamp: \''.$timestamp[0].'\', price: '.number_format($row['price'], 2, '.', '').' },';
 		}		
 		return $dataset;
 		

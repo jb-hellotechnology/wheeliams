@@ -9,7 +9,9 @@
 		<label><perch:forms id="partCode" /> <perch:forms id="partDescription" /></label>
 		<div>
 			<perch:label for="quantity">Quantity (<perch:forms id="uom" />)</perch:label>
-			<perch:input type="number" id="quantity" />
+			<perch:input type="text" id="quantity" pattern="(0|[1-9]\d*)(\.\d{1,3})?"
+			inputmode="decimal"
+			title="Enter a number, up to 3 decimal places" />
 		</div>
 		<perch:success>
 			<p class="alert success">BOM updated | <a href="/boms/?type=<perch:forms id="type" />&edit=1&id=<perch:forms id="id" />">Continue</a></p>
