@@ -42,7 +42,9 @@ class Wheeliams_Settings_Inputs extends PerchAPI_Factory
 				$item .= "|".$json[$value];
 				$values[] = $item;
 			}else{
-				$values[] = $json[$value]."|".$json[$value];
+				if($json[$value]){
+					$values[] = $json[$value]."|".$json[$value];
+				}
 			}
 		}
 		sort($values, SORT_NATURAL);

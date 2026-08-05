@@ -641,12 +641,17 @@
 				case 'bom_manufactured_add':
 					$Session = PerchMembers_Session::fetch();
 					$WheeliamsBoms = new Wheeliams_Boms($API);
-					if($SubmittedForm->data['quantity_add_rm'] !== ''){
-						$quantity = $SubmittedForm->data['quantity_add_rm'];
-					}elseif($SubmittedForm->data['quantity_c'] !== ''){
-						$quantity = $SubmittedForm->data['quantity_c'];
+					// Each form submits only ONE quantity field; coalesce the others to '' so
+					// an absent field isn't mistaken for a value ('' keeps a quantity of 0 valid).
+					$rm = $SubmittedForm->data['quantity_add_rm'] ?? '';
+					$c  = $SubmittedForm->data['quantity_c'] ?? '';
+					$f  = $SubmittedForm->data['quantity_f'] ?? '';
+					if($rm !== ''){
+						$quantity = $rm;
+					}elseif($c !== ''){
+						$quantity = $c;
 					}else{
-						$quantity = $SubmittedForm->data['quantity_f'];
+						$quantity = $f;
 					}
 					$WheeliamsBoms->addToBom($SubmittedForm->data['type'],$_GET['id'],$SubmittedForm->data['component'],$quantity,$Session->get('memberID'));
 					PerchUtil::redirect($_SERVER['REQUEST_URI']);
