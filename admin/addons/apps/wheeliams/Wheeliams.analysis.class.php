@@ -82,7 +82,18 @@ class Wheeliams_Analysis extends PerchAPI_Factory
 
             $productCode = $d['component']['partCode'];
 
-            foreach($Boms->explodeFlat($productID, $target) as $cid => $node){
+            $flat = $Boms->explodeFlat($productID, $target);
+            if(empty($flat)){
+                // No BOM — the flagged item is itself the thing to order (raw
+                // material, fastener, purchased part). Order it directly.
+                $node = $Boms->componentNode($productID, $target);
+                if($node){
+                    $node['total_qty'] = $node['extended_qty'];
+                    $flat = array((int)$productID => $node);
+                }
+            }
+
+            foreach($flat as $cid => $node){
                 if(!isset($collated[$cid])){
                     $collated[$cid] = array('node' => $node, 'qt' => 0, 'used_on' => array());
                 }

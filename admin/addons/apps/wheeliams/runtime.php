@@ -2004,7 +2004,7 @@
 		echo '<dt>Max stock</dt><dd>'.wheeliams_num($max).'</dd>';
 		echo '<dt>Flagged for reorder?</dt><dd>'.($flagged ? 'Yes' : 'No — (stock − on order) is above the reorder level').'</dd>';
 		echo '<dt>Target qty (max − stock − planned)</dt><dd>'.wheeliams_num($target).($target <= 0 ? ' — must be &gt; 0 to reorder' : '').'</dd>';
-		echo '<dt>Direct BOM lines</dt><dd>'.$bomCount.($bomCount === 0 ? ' — this item has no BOM, so there is nothing to reorder. Pick a manufactured product / kit that has a BOM.' : '').'</dd>';
+		echo '<dt>Direct BOM lines</dt><dd>'.$bomCount.($bomCount === 0 ? ' — no BOM, so this item will be reordered directly (as a purchased item / raw material).' : ' — the BOM components will be reordered.').'</dd>';
 		echo '</dl></article></section>';
 	}
 

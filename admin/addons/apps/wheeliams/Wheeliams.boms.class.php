@@ -170,6 +170,11 @@ class Wheeliams_Boms extends PerchAPI_Factory
 		}
 	}
 
+	/* Public single-node builder — used to reorder a leaf item (no BOM) directly. */
+	public function componentNode($componentID, $qty=1){
+		return $this->buildNode($componentID, $qty, 0);
+	}
+
 	/* Build a single node with component + current supplier + cost metadata. */
 	private function buildNode($componentID, $extQty, $level){
 		$Components = new Wheeliams_Components();
