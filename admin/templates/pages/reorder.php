@@ -1,8 +1,6 @@
 <?php if (!defined('PERCH_RUNWAY')) include($_SERVER['DOCUMENT_ROOT'].'/admin/runtime.php'); ?>
 <?php
-	ini_set('display_errors', 1);
-ini_set('display_startup_errors', 1);
-error_reporting(E_ALL);
+
 // Order Analysis / Reorder List — Access Level 2 (View & Order) and 3 (Admin).
 if(!perch_member_logged_in()){
 	header('location:/');
