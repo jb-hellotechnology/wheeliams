@@ -6,10 +6,20 @@ $('#account-nav').click(function(){
 	$('.account-nav').toggleClass('show');
 });
 	
+$('.hide').click(function(){
+	var pOrder = $(this).data('order-id');
+	var pItem = $(this).data('item-id');
+	$.post( "hide.php", { order: pOrder, item: pItem }, function(){
+		location.reload();
+	});
+});
+
 $('.complete').click(function(){
 	var pOrder = $(this).data('order-id');
 	var pItem = $(this).data('item-id');
-	$.post( "update.php", { order: pOrder, item: pItem } );
+	var pSku = $(this).data('sku');
+	var pQty = $(this).data('qty');
+	$.post( "update.php", { order: pOrder, item: pItem, sku: pSku, qty: pQty } );
 	if($(this).is(':checked')){
 		$(this).parent().parent().addClass('strike');
 	}else{

@@ -27,11 +27,23 @@ class Wheeliams_Components extends PerchAPI_Factory
 	}
 	
 	public function byPartCode($partCode){
-		
+
 		$sql = 'SELECT * FROM perch3_wheeliams_components WHERE partCode="'.$partCode.'"';
 		$data = $this->db->get_row($sql);
 		return $data;
-		
+
+	}
+
+	public function bySku($sku){
+
+		// Shopify SKUs omit the part-code version suffix (SKU "A02-0019" vs part
+		// code "A02-0019-A"), so match on the first 8 characters (the base code).
+		$sku = trim((string)$sku);
+		if($sku === '') return null;
+		$base = substr($sku, 0, 8);
+		$sql = 'SELECT * FROM perch3_wheeliams_components WHERE LEFT(partCode,8)='.$this->db->pdb($base).' ORDER BY partCode DESC LIMIT 1';
+		return $this->db->get_row($sql);
+
 	}
 	
 	public function assignSupplier($componentID, $supplierID){

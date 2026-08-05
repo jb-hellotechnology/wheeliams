@@ -1656,6 +1656,9 @@ table tr td{
 	padding: 3px 0;
 }
 
+table tr td a{
+	border-bottom: none;
+}
 .site-header h2{
 	z-index:20000;
 }

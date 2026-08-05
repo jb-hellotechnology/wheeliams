@@ -32,46 +32,11 @@ perch_layout('header');
 			wheeliams_bom_table($type);
 		}else{
 			if(!empty($_GET['id'])){
-				wheeliams_bom_explosion_table((int)$_GET['id']);
+				/* Multilevel BOM with Edit/Delete on this product's direct lines */
+				wheeliams_bom_explosion_table((int)$_GET['id'], true, $_GET['type']);
 			}
 			echo '<div class="split">';
 			echo '<div>';
-			
-			if($bomData){
-				echo '<section>';
-				echo '<header>BOM</header>';
-				echo '<article class="flow table-container">';
-				echo '<table>';
-				echo '<thead>';
-				echo '<th>Part Code</th><th>Description</th><th>Quantity</th><th>Edit</td><th>Delete</th>';
-				echo '</thead>';
-				foreach($bomData as $line){
-					$component = component($line['partCode']);
-					$componentJson = json_decode($component['dynamicFields'], true);
-					$uom = $componentJson['unit_of_measure'];
-					echo '<tr>';
-					echo '<td><a href="/components/?type='.$component['type'].'&edit=1&id='.$component['perch3_wheeliams_componentID'].'">'.$component['partCode'].'</a></td>';
-					echo '<td>'.$componentJson['part_description'].'</td>';
-					echo '<td>'.$line['quantity'].' '.$uom.'</td>';
-					echo '<td>';
-					echo '<a href="/boms/component/?type='.$_GET['type'].'&edit=1&id='.$line['id'].'&component='.$line['perch3_wheeliams_bomID'].'">Edit</a>';
-					// PerchSystem::set_var('bomID', $line['perch3_wheeliams_bomID']);
-					// PerchSystem::set_var('partCode', $componentData['partCode']);
-					// PerchSystem::set_var('quantity', $line['quantity']);
-					// wheeliams_form('bom_edit_row.html');
-					echo '</td>';
-					echo '<td>';
-					PerchSystem::set_var('component', $line['perch3_wheeliams_bomID']);
-					wheeliams_form('bom_delete_row.html');
-					// echo '<a href="/boms/component/?&type='.$_GET['type'].'&delete=1&id='.$line['id'].'&component='.$line['perch3_wheeliams_bomID'].'">Delete</a>';
-					//wheeliams_form('bom_delete_row.html');
-					echo '</td>';
-					echo '</tr>';
-				}
-				echo '</table>';
-				echo '</article>';
-				echo '</section>';
-			}
 		}
 		PerchSystem::set_var('bomID', '');
 		PerchSystem::set_var('partCode', '');

@@ -1820,8 +1820,12 @@
 	 * BOM explosion viewer (Foundation B — Job Details, read-only)
 	 * ------------------------------------------------------------------- */
 
-	/* Render an indented multilevel BOM for a component (built for one unit). */
-	function wheeliams_bom_explosion_table($componentID){
+	/*
+	 * Render an indented multilevel BOM for a component (built for one unit).
+	 * $editable adds Edit/Delete for this product's DIRECT BOM lines (level 1);
+	 * $type is the BOM page type ('products'/'manufactured') for the edit links.
+	 */
+	function wheeliams_bom_explosion_table($componentID, $editable=false, $type=null){
 		$Boms = new Wheeliams_Boms();
 		$tree = $Boms->explode($componentID, 1);
 		if(!$tree){ echo '<p>Component not found.</p>'; return; }
@@ -1833,27 +1837,35 @@
 		echo '<thead class="first-row">';
 		echo '<th>Part Code</th><th>Description</th><th>Qty</th><th>UOM</th><th>Material</th><th>Process</th>';
 		if($canCost){ echo '<th>Supplier</th><th>Unit Cost</th><th>Line Cost</th>'; }
+		if($editable){ echo '<th>Edit</th><th>Delete</th>'; }
 		echo '</thead><tbody>';
 
 		// Render the BOM contents only — the product itself is the page heading, not a row.
 		foreach($tree['children'] as $child){
-			wheeliams_bom_rows($child, $canCost);
+			wheeliams_bom_rows($child, $canCost, $editable, $type);
 		}
 
 		echo '</tbody>';
 		if($canCost){
 			$rollup = wheeliams_bom_rollup($tree);
-			echo '<tfoot><tr><th colspan="8" style="text-align:right">Rolled-up material cost</th><th>£'.number_format($rollup, 2).'</th></tr></tfoot>';
+			echo '<tfoot><tr><th colspan="8" style="text-align:right">Rolled-up material cost</th><th>£'.number_format($rollup, 2).'</th>';
+			if($editable){ echo '<td></td><td></td>'; }
+			echo '</tr></tfoot>';
 		}
 		echo '</table></div>';
 	}
 
 	/* Recursively echo one BOM row per node, indented by depth (top-level BOM lines flush-left). */
-	function wheeliams_bom_rows($node, $canCost){
+	function wheeliams_bom_rows($node, $canCost, $editable=false, $type=null){
 		$depth  = max(0, (int)$node['level'] - 1); // level 1 = direct BOM line = no indent
 		$indent = str_repeat('&nbsp;&nbsp;&nbsp;&nbsp;', $depth);
 		echo '<tr class="bom-level-'.$depth.'">';
-		echo '<td>'.$indent.htmlspecialchars($node['partCode']).'</td>';
+		if($editable){
+			$clink = '/components/?type='.htmlspecialchars((string)$node['type']).'&edit=1&id='.(int)$node['componentID'];
+			echo '<td>'.$indent.'<a href="'.$clink.'">'.htmlspecialchars($node['partCode']).'</a></td>';
+		}else{
+			echo '<td>'.$indent.htmlspecialchars($node['partCode']).'</td>';
+		}
 		echo '<td>'.htmlspecialchars($node['description']).'</td>';
 		echo '<td>'.wheeliams_num($node['extended_qty']).'</td>';
 		echo '<td>'.htmlspecialchars($node['uom']).'</td>';
@@ -1864,9 +1876,21 @@
 			echo '<td>'.($node['unit_cost'] ? '£'.number_format($node['unit_cost'], 2) : '').'</td>';
 			echo '<td>'.($node['line_cost'] ? '£'.number_format($node['line_cost'], 2) : '').'</td>';
 		}
+		if($editable){
+			// Edit/Delete apply only to this product's own (direct) BOM lines.
+			if((int)$node['level'] === 1 && !empty($node['bom_id'])){
+				echo '<td><a href="/boms/component/?type='.htmlspecialchars((string)$type).'&edit=1&id='.(int)$node['parent_id'].'&component='.(int)$node['bom_id'].'">Edit</a></td>';
+				echo '<td>';
+				PerchSystem::set_var('component', $node['bom_id']);
+				wheeliams_form('bom_delete_row.html');
+				echo '</td>';
+			}else{
+				echo '<td></td><td></td>';
+			}
+		}
 		echo '</tr>';
 		foreach($node['children'] as $child){
-			wheeliams_bom_rows($child, $canCost);
+			wheeliams_bom_rows($child, $canCost, $editable, $type);
 		}
 	}
 
@@ -1918,7 +1942,7 @@
 				$sku = trim($item['sku'] ?? '');
 				if($sku === '') continue;
 
-				$c = $Components->byPartCode($sku); // SKU == partCode
+				$c = $Components->bySku($sku); // match by SKU (first 8 chars = part-code base)
 				if(!$c) continue;
 
 				$id = (int)$c['perch3_wheeliams_componentID'];
@@ -2319,4 +2343,65 @@ function wheeliamsFiles(btn, code, type){
 }
 </script>
 JS;
+	}
+
+	/* ---------------------------------------------------------------------
+	 * Phase 6 — automatic stock decrement on job completion
+	 * ------------------------------------------------------------------- */
+
+	/*
+	 * When a job (a Shopify order line) is marked complete, remove the completed
+	 * quantity of the saleable product AND its exploded BOM components from
+	 * stock. $reverse=true restores them (job re-opened). Services are skipped.
+	 * Matches the product by partCode == SKU. Movements are logged with reason
+	 * 'completion', attributed to the member who marked it.
+	 */
+	function wheeliams_complete_job_stock($sku, $qty, $memberID, $reverse=false){
+		$sku = trim((string)$sku);
+		$qty = (float)$qty;
+		if($sku === '' || $qty <= 0) return;
+
+		$Components = new Wheeliams_Components();
+		$product = $Components->bySku($sku); // match by SKU (first 8 chars = part-code base)
+		if(!$product) return;
+		$productID = (int)$product['perch3_wheeliams_componentID'];
+
+		$Stock = new Wheeliams_Stock();
+		$Boms  = new Wheeliams_Boms();
+
+		$sign = $reverse ? 1 : -1; // complete removes stock, re-open restores it
+		$note = 'Job '.($reverse ? 're-opened' : 'complete').' '.$sku;
+
+		// The saleable product itself (unless it's a service).
+		if($product['type'] !== 'services'){
+			$Stock->adjust($productID, $sign * $qty, 'completion', $memberID, $note);
+		}
+
+		// Every component / fastener / material in the BOM, × completed qty.
+		foreach($Boms->explodeFlat($productID, $qty) as $cid => $node){
+			if(!empty($node['is_service'])) continue; // services carry no stock
+			$Stock->adjust($cid, $sign * (float)$node['total_qty'], 'completion', $memberID, $note);
+		}
+	}
+
+	/*
+	 * The BOM page type for a part code. The BOM app categorises by prefix:
+	 * A02 = manufactured component, A06 = kit/product. Others aren't BOM-able.
+	 */
+	function wheeliams_bom_type_for_partcode($partCode){
+		if(strncmp((string)$partCode, 'A02', 3) === 0) return 'manufactured';
+		if(strncmp((string)$partCode, 'A06', 3) === 0) return 'products';
+		return null;
+	}
+
+	/* BOM-page URL for a Shopify SKU (matched to a component by partCode), or null. */
+	function wheeliams_bom_link_for_sku($sku){
+		$sku = trim((string)$sku);
+		if($sku === '') return null;
+		$Components = new Wheeliams_Components();
+		$c = $Components->bySku($sku);
+		if(!$c) return null;
+		$type = wheeliams_bom_type_for_partcode($c['partCode']);
+		if(!$type) return null;
+		return '/boms/?type='.$type.'&edit=1&id='.(int)$c['perch3_wheeliams_componentID'];
 	}

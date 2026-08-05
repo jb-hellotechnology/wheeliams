@@ -123,7 +123,9 @@ class Wheeliams_Boms extends PerchAPI_Factory
 			$extQty  = $unitQty * $qty;           // total for this branch
 			$child = $this->explode($childID, $extQty, $level + 1, $path);
 			if($child){
-				$child['unit_qty'] = $unitQty;    // qty per single parent (for display)
+				$child['unit_qty']  = $unitQty;                          // qty per single parent (for display)
+				$child['bom_id']    = (int)$row['perch3_wheeliams_bomID']; // the BOM link row (for edit/delete)
+				$child['parent_id'] = (int)$row['id'];                     // parent componentID
 				$children[] = $child;
 			}
 		}
@@ -196,6 +198,8 @@ class Wheeliams_Boms extends PerchAPI_Factory
 			'batch_rounding'   => (float)($dyn['batch_rounding_quantity'] ?? 0),
 			'is_service'       => ($c['type'] === 'services'),
 			'level'            => $level,
+			'bom_id'           => 0,         // set by caller for child nodes
+			'parent_id'        => 0,
 			'unit_qty'         => $extQty,   // root: equals extended; children overwritten by caller
 			'extended_qty'     => $extQty,
 			'supplierID'       => $supplierID,
