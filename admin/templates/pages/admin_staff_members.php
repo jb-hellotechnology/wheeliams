@@ -1,19 +1,25 @@
 <?php if (!defined('PERCH_RUNWAY')) include($_SERVER['DOCUMENT_ROOT'].'/admin/runtime.php'); ?>
 <?php
-if(!perch_member_logged_in() OR !perch_member_has_tag('admin')){
-	header("location:/");
-}
+wheeliams_require_level('admin');
 ?>
 <?php
 perch_layout('header');
 ?>
 <main class="full">
-	<p class="admin">Only Visible to Administrators</p>
 	<?php
 	if($_GET['id']){
 	?>
 		<h1>Manage Staff</h1>
-		<?php wheeliams_form('staff_profile_form.html'); ?> 
+		<?php
+		if(($_GET['access'] ?? '') === 'saved'){
+			echo '<p class="alert success">Access level updated.</p>';
+		}
+		if(($_GET['access'] ?? '') === 'blocked'){
+			echo '<p class="alert warning">You can’t remove your own Admin access.</p>';
+		}
+		wheeliams_form('staff_profile_form.html');
+		wheeliams_staff_access_panel($_GET['id']);
+		?>
 	<?php
 	}else{
 	?>

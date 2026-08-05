@@ -5,15 +5,12 @@
 // ini_set('display_startup_errors', 1);
 // error_reporting(E_ALL);
 
-if(!perch_member_logged_in() OR !perch_member_has_tag('admin')){
-	header("location:/");
-}
+wheeliams_require_level('admin');
 ?>
 <?php
 perch_layout('header');
 ?>
 <main class="full">
-	<p class="admin">Only Visible to Administrators</p>
 	<?php
 	$componentData = component($_GET['id']);
 	$bomData = bom($_GET['id']);
@@ -34,6 +31,9 @@ perch_layout('header');
 			/* TABLE OF ITEMS */
 			wheeliams_bom_table($type);
 		}else{
+			if(!empty($_GET['id'])){
+				wheeliams_bom_explosion_table((int)$_GET['id']);
+			}
 			echo '<div class="split">';
 			echo '<div>';
 			

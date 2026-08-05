@@ -1,14 +1,11 @@
 <?php if (!defined('PERCH_RUNWAY')) include($_SERVER['DOCUMENT_ROOT'].'/admin/runtime.php'); ?>
 <?php
-if(!perch_member_logged_in() OR !perch_member_has_tag('admin')){
-	header("location:/");
-}
+wheeliams_require_level('admin');
 ?>
 <?php
 perch_layout('header');
 ?>
 <main class="full">
-	<p class="admin">Only Visible to Administrators</p>
 	<h1>Holidays</h1>
 	<div class="section">
 		<div id='calendar'></div>

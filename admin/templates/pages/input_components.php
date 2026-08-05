@@ -5,15 +5,12 @@
 // ini_set('display_startup_errors', 1);
 // error_reporting(E_ALL);
 
-if(!perch_member_logged_in() OR !perch_member_has_tag('admin')){
-	header("location:/");
-}
+wheeliams_require_level('admin');
 ?>
 <?php
 perch_layout('header');
 ?>
 <main class="full">
-	<p class="admin">Only Visible to Administrators</p>
 	<?php
 	$componentData = component($_GET['id']);
 	if($_GET['type']){

@@ -1,0 +1,50 @@
+<section>
+<perch:form id="email_template_save" app="wheeliams" method="post" class="flow">
+
+	<header>
+		<h2>Email Template</h2>
+	</header>
+
+	<article>
+		<div>
+			<perch:label for="name">Template Name</perch:label>
+			<perch:input type="text" id="name" required />
+		</div>
+		<div>
+			<perch:label for="email_to">To</perch:label>
+			<perch:input type="text" id="email_to" />
+			<small class="help">e.g. <code>{SUPPLIER_EMAIL}</code></small>
+		</div>
+		<div>
+			<perch:label for="email_bcc">BCC</perch:label>
+			<perch:input type="text" id="email_bcc" />
+		</div>
+		<div>
+			<perch:label for="subject">Subject</perch:label>
+			<perch:input type="text" id="subject" />
+			<small class="help">e.g. <code>{ORDER_TYPE} {ORDER_NUMBER} &ndash; Wheeliams</code></small>
+		</div>
+		<div>
+			<perch:label for="content">Content</perch:label>
+			<perch:input type="textarea" id="content" rows="12" />
+			<small class="help">HTML allowed. Insert <code>{ORDER_TABLE}</code> where the list of items should appear.</small>
+		</div>
+		<div>
+			<perch:label for="attachments">Attachments</perch:label>
+			<perch:input type="text" id="attachments" />
+			<small class="help">Which Google Drive files to attach, e.g. <code>Drawings, STEP, DXF</code> (matched by part code at send time).</small>
+		</div>
+
+		<perch:success>
+			<p class="alert success">Template saved.</p>
+		</perch:success>
+	</article>
+
+	<footer>
+		<perch:input type="submit" value="Save Template" class="button primary" />
+	</footer>
+
+	<perch:input type="hidden" id="id" />
+
+</perch:form>
+</section>

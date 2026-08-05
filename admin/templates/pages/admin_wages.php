@@ -1,8 +1,6 @@
 <?php if (!defined('PERCH_RUNWAY')) include($_SERVER['DOCUMENT_ROOT'].'/admin/runtime.php'); ?>
 <?php
-if(!perch_member_logged_in() OR !perch_member_has_tag('admin')){
-	header("location:/");
-}
+wheeliams_require_level('admin');
 
 if($_GET['y']){
 	$year = $_GET['y'];
@@ -48,7 +46,6 @@ $date = date("F Y", mktime(0, 0, 0, $month+1, 1, $year));
 perch_layout('header');
 ?>
 <main class="full">
-	<p class="admin">Only Visible to Administrators</p>
 	<h1>Wages Log</h1>
 	<div class="header period">
 		<a class="button" href="/staff/wages/?m=<?= $prev_month ?>&y=<?= $prev_year ?>#breaks">&larr;</a>

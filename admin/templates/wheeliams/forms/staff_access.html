@@ -1,0 +1,30 @@
+<section>
+<perch:form id="staff_access" app="wheeliams" method="post" class="flow">
+
+	<header>
+		<h2>MRP Access Level</h2>
+	</header>
+
+	<article>
+		<p>Set what <strong><perch:forms id="name" /></strong> can do in the MRP tools.</p>
+
+		<div>
+			<perch:label for="access_level">Access Level</perch:label>
+			<perch:input type="select" id="access_level" options="None (No Access)|none,View (Level 1)|view,View and Order (Level 2)|view_order,Admin (Level 3)|admin" />
+			<br /><small class="help">Level 1 can view data. Level 2 can also manage stock and generate orders. Level 3 (Admin) has full access to everything.</small>
+		</div>
+
+		<perch:success>
+			<p class="alert success">Access level updated.</p>
+		</perch:success>
+	</article>
+
+	<footer>
+		<perch:input type="submit" value="Save Access Level" class="button primary" />
+	</footer>
+
+	<perch:input type="hidden" id="staffID" />
+	<perch:input type="hidden" id="memberID" />
+
+</perch:form>
+</section>

@@ -1,0 +1,46 @@
+<section>
+<perch:form id="stock_manage" app="wheeliams" method="post" class="flow">
+
+	<header>
+		<h2>Manage Stock Level</h2>
+	</header>
+
+	<article>
+		<dl class="stock-info">
+			<dt>Part Code</dt><dd><perch:forms id="partCode" /></dd>
+			<dt>Description</dt><dd><perch:forms id="part_description" /></dd>
+			<dt>Unit of Measure</dt><dd><perch:forms id="unit_of_measure" /></dd>
+			<dt>Maximum Stock Level</dt><dd><perch:forms id="maximum_stock_level" /></dd>
+			<dt>Reorder Quantity</dt><dd><perch:forms id="reorder_quantity" /></dd>
+		</dl>
+
+		<div>
+			<perch:label for="current_level">Current Stock Level</perch:label>
+			<perch:input type="text" id="current_level" pattern="\d+(\.\d{1,3})?" inputmode="decimal" title="Number, up to 3 decimal places" />
+			<small class="help">Overwrite to correct the level after a manual stock check.</small>
+		</div>
+
+		<div>
+			<perch:label for="adjust">Add / Remove Stock</perch:label>
+			<perch:input type="text" id="adjust" pattern="-?\d+(\.\d{1,3})?" inputmode="decimal" title="Use a negative number to remove stock" />
+			<small class="help">+ve to add, &minus;ve to remove &mdash; applied on top of the current level.</small>
+		</div>
+
+		<div>
+			<perch:label for="note">Note (optional)</perch:label>
+			<perch:input type="text" id="note" />
+		</div>
+
+		<perch:success>
+			<p class="alert success">Stock updated.</p>
+		</perch:success>
+	</article>
+
+	<footer>
+		<perch:input type="submit" value="Save" class="button primary" />
+	</footer>
+
+	<perch:input type="hidden" id="component" />
+
+</perch:form>
+</section>
