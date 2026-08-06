@@ -23,6 +23,7 @@ if($_SERVER['REQUEST_METHOD'] === 'POST' && wheeliams_can_order() && ($_POST['ac
 // Send-to-supplier action (Brevo). Redirects with a status message.
 if($_SERVER['REQUEST_METHOD'] === 'POST' && wheeliams_can_order() && ($_POST['action'] ?? '') === 'send_email'){
 	require_once $_SERVER['DOCUMENT_ROOT'].'/vendor/autoload.php';
+	include_once $_SERVER['DOCUMENT_ROOT'].'/secrets.php'; // Brevo key + Drive credentials
 	include_once $_SERVER['DOCUMENT_ROOT'].'/admin/addons/apps/wheeliams/Wheeliams.orderemail.class.php';
 
 	$Session    = PerchMembers_Session::fetch();

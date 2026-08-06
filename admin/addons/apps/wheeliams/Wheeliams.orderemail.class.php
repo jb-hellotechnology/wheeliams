@@ -28,26 +28,31 @@ class Wheeliams_Order_Email
             return array('ok' => false, 'msg' => 'Brevo API key not configured (set WHEELIAMS_BREVO_API_KEY in secrets.php).');
         }
 
-        // Supplier email
+        // Recipient = the supplier's ORDERING contact. Required.
         $Suppliers = new Wheeliams_Suppliers();
-        $s    = $po['supplierID'] ? $Suppliers->supplier($po['supplierID']) : null;
-        $sdyn = $s ? (json_decode($s['dynamicFields'], true) ?: array()) : array();
-        $supplierEmail = trim($sdyn['email'] ?? '');
-
-        $vars = $this->vars($po, $lines, $supplierEmail);
-
-        $to      = trim(wheeliams_render_placeholders($template['email_to'], $vars));
-        if(!filter_var($to, FILTER_VALIDATE_EMAIL)) $to = $supplierEmail; // fall back to supplier email
-        if(!filter_var($to, FILTER_VALIDATE_EMAIL)){
-            return array('ok' => false, 'msg' => 'No valid recipient email — set the supplier\'s General Email.');
+        $ordering  = $po['supplierID'] ? $Suppliers->orderingContact($po['supplierID']) : null;
+        $orderingEmail = $ordering ? trim($ordering['email']) : '';
+        if(!filter_var($orderingEmail, FILTER_VALIDATE_EMAIL)){
+            return array(
+                'ok'          => false,
+                'no_ordering' => true,
+                'msg'         => 'This supplier has no ORDERING contact with a valid email. Add one to the supplier before sending.',
+            );
         }
+        $orderingName = trim(($ordering['first_name'] ?? '').' '.($ordering['last_name'] ?? '')) ?: $po['supplierName'];
+
+        // {SUPPLIER_EMAIL} resolves to the ORDERING contact.
+        $vars = $this->vars($po, $lines, $orderingEmail);
+
+        $to = trim(wheeliams_render_placeholders($template['email_to'], $vars));
+        if(!filter_var($to, FILTER_VALIDATE_EMAIL)) $to = $orderingEmail; // fall back to the ordering contact
         $bcc     = trim(wheeliams_render_placeholders($template['email_bcc'], $vars));
         $subject = wheeliams_render_placeholders($template['subject'], $vars);
         $html    = wheeliams_render_placeholders($template['content'], $vars);
 
         $attachments = $this->attachments($lines);
 
-        return $this->brevo($to, $po['supplierName'], $bcc, $subject, $html, $attachments);
+        return $this->brevo($to, $orderingName, $bcc, $subject, $html, $attachments);
     }
 
     /* Placeholder values for a saved PO. */

@@ -2336,9 +2336,23 @@
 		// Send to supplier (Brevo). Templates supply the wording; parts' Drive files attach.
 		$templates = wheeliams_email_templates();
 		echo '<section class="flow no-print"><header><h2>Send to Supplier</h2></header><article class="flow">';
-		if(!$templates){
+
+		// The order email goes to the supplier's ORDERING contact — require one.
+		$Suppliers = new Wheeliams_Suppliers();
+		$ordering  = $po['supplierID'] ? $Suppliers->orderingContact($po['supplierID']) : null;
+
+		if(!$ordering || trim($ordering['email']) === ''){
+			echo '<p class="alert warning">This supplier has no <strong>ORDERING</strong> contact with an email address. Add one before this order can be sent.</p>';
+			if($po['supplierID'] && perch_member_has_tag('admin')){
+				echo '<p><a class="button" href="/settings/suppliers/?edit=1&id='.(int)$po['supplierID'].'">Add ORDERING contact</a></p>';
+			}else{
+				echo '<p><em>Ask an administrator to add an ORDERING contact to '.htmlspecialchars($po['supplierName'] ?: 'this supplier').'.</em></p>';
+			}
+		}elseif(!$templates){
 			echo '<p>No email templates yet. <a href="/settings/email-templates/?new=1">Create one</a> first.</p>';
 		}else{
+			$oname = trim(($ordering['first_name'] ?? '').' '.($ordering['last_name'] ?? ''));
+			echo '<p>Will send to '.($oname !== '' ? '<strong>'.htmlspecialchars($oname).'</strong> ' : '').'&lt;'.htmlspecialchars($ordering['email']).'&gt; <small>(ORDERING contact)</small></p>';
 			echo '<form method="post" action="/purchase-orders/?po='.(int)$poID.'">';
 			echo '<input type="hidden" name="action" value="send_email">';
 			echo '<input type="hidden" name="po" value="'.(int)$poID.'">';

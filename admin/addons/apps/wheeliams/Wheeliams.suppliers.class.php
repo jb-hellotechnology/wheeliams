@@ -48,11 +48,17 @@ class Wheeliams_Suppliers extends PerchAPI_Factory
 	}
 	
 	public function contacts($id){
-		
+
 		$sql = 'SELECT * FROM perch3_wheeliams_suppliers_contacts WHERE wheeliams_supplierID="'.$id.'"';
 		$data = $this->db->get_rows($sql);
 		return $data;
-		
+
+	}
+
+	/* The supplier's ORDERING contact (used for order emails), or null. */
+	public function orderingContact($id){
+		$sql = 'SELECT * FROM perch3_wheeliams_suppliers_contacts WHERE wheeliams_supplierID='.$this->db->pdb((int)$id).' AND UPPER(contact_type)="ORDERING" ORDER BY contactID ASC LIMIT 1';
+		return $this->db->get_row($sql);
 	}
 	
 	public function contact($id){
