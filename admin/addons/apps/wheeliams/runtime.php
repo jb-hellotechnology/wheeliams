@@ -1830,30 +1830,34 @@
 	 * $editable adds Edit/Delete for this product's DIRECT BOM lines (level 1);
 	 * $type is the BOM page type ('products'/'manufactured') for the edit links.
 	 */
-	function wheeliams_bom_explosion_table($componentID, $editable=false, $type=null){
+	function wheeliams_bom_explosion_table($componentID, $editable=false, $type=null, $showFiles=false){
 		$Boms = new Wheeliams_Boms();
 		$tree = $Boms->explode($componentID, 1);
 		if(!$tree){ echo '<p>Component not found.</p>'; return; }
 		if(empty($tree['children'])){ echo '<p>No BOM defined for this item.</p>'; return; }
 
-		$canCost = wheeliams_can_order(); // Level 2/3 also see supplier + cost
+		// Process + supplier/cost columns are only shown on the editable (admin) BOM.
+		$canCost = $editable && wheeliams_can_order();
 
 		echo '<div class="table-container"><table class="datatable bom-explosion">';
 		echo '<thead class="first-row">';
-		echo '<th>Part Code</th><th>Description</th><th>Qty</th><th>UOM</th><th>Material</th><th>Process</th>';
+		echo '<th>Part Code</th><th>Description</th><th>Qty</th><th>UOM</th><th>Material</th>';
+		if($editable){ echo '<th>Process</th>'; }
 		if($canCost){ echo '<th>Supplier</th><th>Unit Cost</th><th>Line Cost</th>'; }
+		if($showFiles){ echo '<th class="no-print">Drawings</th>'; }
 		if($editable){ echo '<th>Edit</th><th>Delete</th>'; }
 		echo '</thead><tbody>';
 
 		// Render the BOM contents only — the product itself is the page heading, not a row.
 		foreach($tree['children'] as $child){
-			wheeliams_bom_rows($child, $canCost, $editable, $type);
+			wheeliams_bom_rows($child, $canCost, $editable, $type, $showFiles);
 		}
 
 		echo '</tbody>';
 		if($canCost){
 			$rollup = wheeliams_bom_rollup($tree);
 			echo '<tfoot><tr><th colspan="8" style="text-align:right">Rolled-up material cost</th><th>£'.number_format($rollup, 2).'</th>';
+			if($showFiles){ echo '<td class="no-print"></td>'; }
 			if($editable){ echo '<td></td><td></td>'; }
 			echo '</tr></tfoot>';
 		}
@@ -1861,7 +1865,7 @@
 	}
 
 	/* Recursively echo one BOM row per node, indented by depth (top-level BOM lines flush-left). */
-	function wheeliams_bom_rows($node, $canCost, $editable=false, $type=null){
+	function wheeliams_bom_rows($node, $canCost, $editable=false, $type=null, $showFiles=false){
 		$depth  = max(0, (int)$node['level'] - 1); // level 1 = direct BOM line = no indent
 		$indent = str_repeat('&nbsp;&nbsp;&nbsp;&nbsp;', $depth);
 		echo '<tr class="bom-level-'.$depth.'">';
@@ -1875,11 +1879,20 @@
 		echo '<td>'.wheeliams_num($node['extended_qty']).'</td>';
 		echo '<td>'.htmlspecialchars($node['uom']).'</td>';
 		echo '<td>'.htmlspecialchars($node['generic_material']).'</td>';
-		echo '<td>'.htmlspecialchars($node['process_type']).'</td>';
+		if($editable){ echo '<td>'.htmlspecialchars($node['process_type']).'</td>'; }
 		if($canCost){
-			echo '<td>'.htmlspecialchars($node['supplierName']).'</td>';
+			// Supplier name, hyperlinked to their site when we have one (the "buy" link).
+			$sup = htmlspecialchars($node['supplierName']);
+			if(!empty($node['supplierUrl'])){
+				$sup = '<a href="'.htmlspecialchars($node['supplierUrl']).'" target="_blank" rel="noopener">'.$sup.'</a>';
+			}
+			echo '<td>'.$sup.'</td>';
 			echo '<td>'.($node['unit_cost'] ? '£'.number_format($node['unit_cost'], 2) : '').'</td>';
 			echo '<td>'.($node['line_cost'] ? '£'.number_format($node['line_cost'], 2) : '').'</td>';
+		}
+		if($showFiles){
+			$dt = wheeliams_drive_type_for($node['partCode'], $node['type']);
+			echo '<td class="no-print"><button type="button" class="button small" onclick="wheeliamsJobFiles(\''.htmlspecialchars($node['partCode'], ENT_QUOTES).'\',\''.htmlspecialchars($dt, ENT_QUOTES).'\')">Files</button></td>';
 		}
 		if($editable){
 			// Edit/Delete apply only to this product's own (direct) BOM lines.
@@ -1895,7 +1908,7 @@
 		}
 		echo '</tr>';
 		foreach($node['children'] as $child){
-			wheeliams_bom_rows($child, $canCost, $editable, $type);
+			wheeliams_bom_rows($child, $canCost, $editable, $type, $showFiles);
 		}
 	}
 
@@ -2107,8 +2120,16 @@
 
 	/* Distinct suppliers / component types / process types present in a run. */
 	function wheeliams_run_suppliers($runID){
+		// Suppliers in this run that have NOT yet had a PO/enquiry raised for it
+		// (cascading exclusion — work through until the list is empty).
 		$db = PerchDB::fetch();
-		return $db->get_rows('SELECT DISTINCT supplierID, supplierName FROM perch3_wheeliams_reorder_lines WHERE runID='.$db->pdb((int)$runID).' ORDER BY supplierName ASC');
+		return $db->get_rows('SELECT DISTINCT rl.supplierID, rl.supplierName
+			FROM perch3_wheeliams_reorder_lines rl
+			WHERE rl.runID='.$db->pdb((int)$runID).'
+			AND rl.supplierID NOT IN (
+				SELECT po.supplierID FROM perch3_wheeliams_purchase_orders po WHERE po.runID='.$db->pdb((int)$runID).'
+			)
+			ORDER BY rl.supplierName ASC');
 	}
 	function wheeliams_run_types($runID){
 		$db = PerchDB::fetch();
@@ -2244,6 +2265,15 @@
 		}
 	}
 
+	/* Drive folder type for a specific part — A06=KIT, A02=COMPONENT, else by type. */
+	function wheeliams_drive_type_for($partCode, $componentType){
+		if(strncmp((string)$partCode, 'A06', 3) === 0) return 'KIT';
+		if(strncmp((string)$partCode, 'A02', 3) === 0) return 'COMPONENT';
+		if($componentType === 'fasteners')     return 'FASTENER';
+		if($componentType === 'raw-materials') return 'RAW MATERIALS';
+		return 'COMPONENT';
+	}
+
 	/* Save a supplier's filtered reorder lines as a PO / enquiry. Returns PO id (0 if not saved). */
 	function wheeliams_save_purchase_order($runID, $supplierID, $type, $process, $isPO, $memberID){
 		// A PO is per-supplier — require a specific supplier, not "All".
@@ -2298,7 +2328,30 @@
 		echo '<dt>Date</dt><dd>'.htmlspecialchars($po['created_at']).'</dd>';
 		echo '<dt>Reference</dt><dd>'.htmlspecialchars($po['reference']).'</dd>';
 		echo '<dt>Status</dt><dd>'.htmlspecialchars(ucfirst(str_replace('-', ' ', $po['status']))).'</dd>';
+		if(!empty($po['sent_at'])){
+			echo '<dt>Sent</dt><dd>'.htmlspecialchars($po['sent_at']).' to '.htmlspecialchars($po['sent_to'] ?: '—').'</dd>';
+		}
 		echo '</dl>';
+
+		// Send to supplier (Brevo). Templates supply the wording; parts' Drive files attach.
+		$templates = wheeliams_email_templates();
+		echo '<section class="flow no-print"><header><h2>Send to Supplier</h2></header><article class="flow">';
+		if(!$templates){
+			echo '<p>No email templates yet. <a href="/settings/email-templates/?new=1">Create one</a> first.</p>';
+		}else{
+			echo '<form method="post" action="/purchase-orders/?po='.(int)$poID.'">';
+			echo '<input type="hidden" name="action" value="send_email">';
+			echo '<input type="hidden" name="po" value="'.(int)$poID.'">';
+			echo '<label for="template">Email template</label> <select name="template" id="template">';
+			foreach($templates as $tpl){
+				echo '<option value="'.(int)$tpl['perch3_wheeliams_email_templateID'].'">'.htmlspecialchars($tpl['name']).'</option>';
+			}
+			echo '</select> ';
+			$label = !empty($po['sent_at']) ? 'Re-send to Supplier' : 'Send to Supplier';
+			echo '<button type="submit" class="button primary" onclick="return confirm(\'Send this order to the supplier now?\')">'.$label.'</button>';
+			echo '</form>';
+		}
+		echo '</article></section>';
 
 		echo '<form method="post" action="/purchase-orders/?po='.(int)$poID.'" class="flow">';
 		echo '<input type="hidden" name="action" value="checkin">';
@@ -2399,14 +2452,14 @@ JS;
 		return null;
 	}
 
-	/* BOM-page URL for a Shopify SKU (matched to a component by partCode), or null. */
+	/* Job Details URL for a Shopify SKU (matched to a component by partCode), or null.
+	   Points at the read-only /job/ view (L1+); admins get an "Edit BOM" link there. */
 	function wheeliams_bom_link_for_sku($sku){
 		$sku = trim((string)$sku);
 		if($sku === '') return null;
 		$Components = new Wheeliams_Components();
 		$c = $Components->bySku($sku);
 		if(!$c) return null;
-		$type = wheeliams_bom_type_for_partcode($c['partCode']);
-		if(!$type) return null;
-		return '/boms/?type='.$type.'&edit=1&id='.(int)$c['perch3_wheeliams_componentID'];
+		if(!wheeliams_bom_type_for_partcode($c['partCode'])) return null; // only A02/A06 have a BOM view
+		return '/job/?id='.(int)$c['perch3_wheeliams_componentID'];
 	}

@@ -10,6 +10,7 @@ wheeliams_require_level('view_order');
 
 $Analysis = new Wheeliams_Analysis();
 $Analysis->install();
+(new Wheeliams_Purchase_Orders())->install(); // needed for the cascading supplier exclusion
 
 // Handle actions before any output (they redirect).
 if($_SERVER['REQUEST_METHOD'] === 'POST' && wheeliams_can_order()){

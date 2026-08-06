@@ -182,13 +182,15 @@ class Wheeliams_Boms extends PerchAPI_Factory
 		if(!$c) return null;
 		$dyn = json_decode($c['dynamicFields'], true) ?: array();
 
-		$supplierID = null; $supplierName = ''; $unitCost = 0.0;
+		$supplierID = null; $supplierName = ''; $supplierUrl = ''; $unitCost = 0.0;
 		$sup = $this->db->get_row('SELECT wheeliams_supplierID FROM perch3_wheeliams_components_suppliers WHERE perch3_wheeliams_componentID='.(int)$componentID.' AND current=1 LIMIT 1');
 		if($sup){
 			$supplierID = $sup['wheeliams_supplierID'];
 			$Suppliers = new Wheeliams_Suppliers();
 			$s = $Suppliers->supplier($supplierID);
 			$supplierName = $s['name'] ?? '';
+			$sdyn = $s ? (json_decode($s['dynamicFields'], true) ?: array()) : array();
+			$supplierUrl = $sdyn['website'] ?? ($sdyn['url'] ?? '');
 			$unitCost = (float)$Components->getComponentPrice($componentID, $supplierID);
 		}
 
@@ -209,6 +211,7 @@ class Wheeliams_Boms extends PerchAPI_Factory
 			'extended_qty'     => $extQty,
 			'supplierID'       => $supplierID,
 			'supplierName'     => $supplierName,
+			'supplierUrl'      => $supplierUrl,
 			'unit_cost'        => $unitCost,
 			'line_cost'        => $unitCost * $extQty,
 		);

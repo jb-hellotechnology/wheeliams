@@ -20,6 +20,31 @@ if($_SERVER['REQUEST_METHOD'] === 'POST' && wheeliams_can_order() && ($_POST['ac
 	PerchUtil::redirect('/purchase-orders/?po='.$poID.'&checkedin=1');
 }
 
+// Send-to-supplier action (Brevo). Redirects with a status message.
+if($_SERVER['REQUEST_METHOD'] === 'POST' && wheeliams_can_order() && ($_POST['action'] ?? '') === 'send_email'){
+	require_once $_SERVER['DOCUMENT_ROOT'].'/vendor/autoload.php';
+	include_once $_SERVER['DOCUMENT_ROOT'].'/admin/addons/apps/wheeliams/Wheeliams.orderemail.class.php';
+
+	$Session    = PerchMembers_Session::fetch();
+	$poID       = (int)($_POST['po'] ?? 0);
+	$templateID = (int)($_POST['template'] ?? 0);
+
+	$po        = $PO->order($poID);
+	$lines     = $PO->lines($poID);
+	$Templates = new Wheeliams_Email_Templates();
+	$template  = $templateID ? $Templates->get($templateID) : null;
+
+	$result = array('ok' => false, 'msg' => 'Missing order or template.');
+	if($po && $template){
+		$Mailer = new Wheeliams_Order_Email();
+		$result = $Mailer->send($po, $lines, $template);
+		if($result['ok']){
+			$PO->markSent($poID, $Session->get('memberID'), $result['to'] ?? '');
+		}
+	}
+	PerchUtil::redirect('/purchase-orders/?po='.$poID.'&'.($result['ok'] ? 'sent' : 'senderr').'='.rawurlencode($result['msg']));
+}
+
 perch_layout('header');
 
 $poID = (int)($_GET['po'] ?? 0);
@@ -32,6 +57,12 @@ if($poID){
 	echo '<h1>Purchase Order</h1>';
 	if(($_GET['checkedin'] ?? '') === '1'){
 		echo '<p class="alert success no-print">Received quantities checked in to stock.</p>';
+	}
+	if(($_GET['sent'] ?? '') !== ''){
+		echo '<p class="alert success no-print">Order email sent. '.htmlspecialchars($_GET['sent']).'</p>';
+	}
+	if(($_GET['senderr'] ?? '') !== ''){
+		echo '<p class="alert warning no-print">Order email not sent &mdash; '.htmlspecialchars($_GET['senderr']).'</p>';
 	}
 	wheeliams_po_detail($poID);
 

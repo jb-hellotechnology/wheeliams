@@ -31,9 +31,24 @@ class Wheeliams_Purchase_Orders extends PerchAPI_Factory
             status VARCHAR(16) NOT NULL DEFAULT 'open',
             created_at DATETIME DEFAULT NULL,
             created_by INT UNSIGNED DEFAULT NULL,
+            sent_at DATETIME DEFAULT NULL,
+            sent_by INT UNSIGNED DEFAULT NULL,
+            sent_to VARCHAR(255) DEFAULT NULL,
             PRIMARY KEY (perch3_wheeliams_purchase_orderID),
             KEY supplierID (supplierID)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Add the send-tracking columns to any pre-existing table.
+        foreach(array(
+            'sent_at' => 'DATETIME DEFAULT NULL',
+            'sent_by' => 'INT UNSIGNED DEFAULT NULL',
+            'sent_to' => 'VARCHAR(255) DEFAULT NULL',
+        ) as $col => $def){
+            $exists = $this->db->get_row("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='".$this->po_table."' AND COLUMN_NAME='".$col."'");
+            if(!$exists){
+                $this->db->execute("ALTER TABLE ".$this->po_table." ADD COLUMN ".$col." ".$def);
+            }
+        }
 
         $this->db->execute("CREATE TABLE IF NOT EXISTS ".$this->line_table." (
             perch3_wheeliams_purchase_order_lineID INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -157,6 +172,15 @@ class Wheeliams_Purchase_Orders extends PerchAPI_Factory
         }
 
         $this->refreshStatus($poID);
+    }
+
+    public function markSent($poID, $memberID, $toEmail)
+    {
+        $this->db->update($this->po_table, array(
+            'sent_at' => date('Y-m-d H:i:s'),
+            'sent_by' => (int)$memberID,
+            'sent_to' => $toEmail,
+        ), $this->pk, (int)$poID);
     }
 
     public function refreshStatus($poID)
