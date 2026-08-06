@@ -55,51 +55,72 @@ class Wheeliams_Analysis extends PerchAPI_Factory
        Pass $demand to inject demand (testing); null reads live Shopify orders. */
     public function run($memberID, $note='', $demand=null)
     {
-        $Stock = new Wheeliams_Stock();
-        $Boms  = new Wheeliams_Boms();
+        $Stock      = new Wheeliams_Stock();
+        $Boms       = new Wheeliams_Boms();
+        $Components = new Wheeliams_Components();
 
         if($demand === null){
             $demand = wheeliams_demand_on_order(); // [componentID => ['component'=>row, 'qty'=>float]]
         }
 
-        // Collate required component quantities across all flagged products.
-        $collated = array(); // componentID => ['node'=>..., 'qt'=>float, 'used_on'=>[partCode=>true]]
+        // --- 1. Explode every kit on order into gross COMPONENT demand ---
+        // Component demand = (component qty per kit) × (kit quantity on order),
+        // summed across all kits. Kits are split into their parts; a kit is never
+        // ordered whole.
+        $need = array(); // componentID => ['node'=>..., 'qty'=>float, 'used_on'=>[partCode=>true]]
 
         foreach($demand as $productID => $d){
-            $dyn     = json_decode($d['component']['dynamicFields'], true) ?: array();
-            $stock   = $Stock->level($productID);
-            $planned = $Stock->planned($productID);
-            $reorder = (float)($dyn['reorder_quantity'] ?? 0);
-            $maxlvl  = (float)($dyn['maximum_stock_level'] ?? 0);
             $onOrder = (float)$d['qty'];
-
-            // Flag when (stock - quantity on order) falls to or below the reorder level.
-            if(($stock - $onOrder) > $reorder) continue;
-
-            // Target order quantity to refill toward the maximum stock level.
-            $target = $maxlvl - $stock - $planned;
-            if($target <= 0) continue;
-
+            if($onOrder <= 0) continue;
             $productCode = $d['component']['partCode'];
 
-            $flat = $Boms->explodeFlat($productID, $target);
+            $flat = $Boms->explodeFlat($productID, $onOrder);
             if(empty($flat)){
-                // No BOM — the flagged item is itself the thing to order (raw
-                // material, fastener, purchased part). Order it directly.
-                $node = $Boms->componentNode($productID, $target);
-                if($node){
-                    $node['total_qty'] = $node['extended_qty'];
-                    $flat = array((int)$productID => $node);
+                // No BOM. Only leaf purchased items (raw materials, fasteners) are
+                // ordered directly; a kit or part with no BOM can't be split, so skip it.
+                $type = $d['component']['type'] ?? '';
+                if(in_array($type, array('raw-materials', 'fasteners'), true)){
+                    $node = $Boms->componentNode($productID, $onOrder);
+                    if($node){ $node['total_qty'] = $node['extended_qty']; $flat = array((int)$productID => $node); }
                 }
             }
 
             foreach($flat as $cid => $node){
-                if(!isset($collated[$cid])){
-                    $collated[$cid] = array('node' => $node, 'qt' => 0, 'used_on' => array());
+                if(!isset($need[$cid])){
+                    $need[$cid] = array('node' => $node, 'qty' => 0, 'used_on' => array());
                 }
-                $collated[$cid]['qt'] += $node['total_qty'];
-                $collated[$cid]['used_on'][$productCode] = true;
+                $need[$cid]['qty'] += $node['total_qty'];
+                $need[$cid]['used_on'][$productCode] = true;
             }
+        }
+
+        // --- 2. Check each component's OWN stock / reorder level ---
+        // Only components whose projected stock (after meeting demand) falls to or
+        // below their reorder level are ordered; order enough to refill to the max.
+        $collated = array(); // componentID => ['node'=>..., 'qt'=>float, 'used_on'=>[...]]
+
+        foreach($need as $cid => $info){
+            $comp = $Components->component($cid);
+            if(!$comp) continue;
+            $cdyn      = json_decode($comp['dynamicFields'], true) ?: array();
+            $cstock    = $Stock->level($cid);
+            $cplan     = $Stock->planned($cid);
+            $creorder  = (float)($cdyn['reorder_quantity'] ?? 0);
+            $cmax      = (float)($cdyn['maximum_stock_level'] ?? 0);
+            $cdemand   = (float)$info['qty'];
+
+            $projected = $cstock + $cplan - $cdemand; // stock left after building the orders
+
+            if($projected > $creorder) continue;      // enough stock — no reorder needed
+
+            $orderQty = $cmax - $projected;            // refill back up to the maximum
+            if($orderQty <= 0) continue;
+
+            $collated[$cid] = array(
+                'node'    => $info['node'],
+                'qt'      => $orderQty,
+                'used_on' => $info['used_on'],
+            );
         }
 
         // Save the run header.

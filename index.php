@@ -5,6 +5,7 @@ if(!perch_member_logged_in()){
 	header("location:/sign-in/");
 }	
 
+$isAdmin = perch_member_has_tag('admin');
 $servername = "localhost";
 $username = "wheeliams_dashboard";
 $password = "EGalEh1x..r3";
@@ -160,7 +161,7 @@ perch_layout('header');
 			<ul>
 				<li><button data-tab="jobs" class="active">Jobs List</button></li>
 				<li><button data-tab="items">Items Required</button></li>
-					<li><button data-tab="hidden">Hidden</button></li>
+					<?php if($isAdmin){ echo '<li><button data-tab="hidden">Hidden</button></li>'; } ?>
 			</ul>
 		</header>
 		<article>
@@ -172,7 +173,7 @@ perch_layout('header');
                       <th>Items</th>
                       <th>Quantity</th>
                       <th>Complete</th>
-                      <th>Hide</th>
+                      <?php if($isAdmin){ echo '<th>Hide</th>'; } ?>
                       <th>Order</th>
                       <th>Order Date</th>
                     </tr>
@@ -260,9 +261,7 @@ perch_layout('header');
 																		  if($isComplete){ echo 'CHECKED'; }
 																	  echo ' />
 																	  </td>
-																	  <td>
-																	  	<a class="hide" href="javascript:;" data-order-id="'.$Order['name'].'" data-item-id="'.$item['id'].'">Hide</a>
-																	  </td>
+																	  '.($isAdmin ? '<td><a class="hide" href="javascript:;" data-order-id="'.$Order['name'].'" data-item-id="'.$item['id'].'">Hide</a></td>' : '').'
 																	  <td>
 																		  <div>'.$Order['name'].'</div>
 																	  </td>
@@ -314,6 +313,7 @@ perch_layout('header');
 					  </div>
 
 			</div>
+			<?php if($isAdmin): ?>
 			<div class="tab hidden">
 				<div class="table-container">
 					<table class="">
@@ -342,6 +342,7 @@ perch_layout('header');
 					</table>
 				</div>
 			</div>
+						  <?php endif; ?>
 						  </article>
 	</section>
 				  </main>
