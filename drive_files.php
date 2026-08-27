@@ -47,6 +47,8 @@ function findFolder(Google\Service\Drive $drive, string $name, string $parentId)
 		'q'      => "mimeType='application/vnd.google-apps.folder'"
 				  . " and name='{$escaped}' and '{$parentId}' in parents and trashed=false",
 		'fields' => 'files(id)',
+		'supportsAllDrives' => true,
+		'includeItemsFromAllDrives' => true,
 	]);
 	$files = $results->getFiles();
 	return count($files) ? $files[0]->getId() : null;
@@ -61,6 +63,8 @@ function listFilesRecursive(Google\Service\Drive $drive, string $folderId, strin
 		$params = [
 			'q'      => "'{$folderId}' in parents and mimeType != 'application/vnd.google-apps.folder' and trashed=false",
 			'fields' => 'nextPageToken, files(id, name, mimeType, webViewLink)',
+			'supportsAllDrives' => true,
+			'includeItemsFromAllDrives' => true,
 		];
 		if ($pageToken) $params['pageToken'] = $pageToken;
 		$res = $drive->files->listFiles($params);
@@ -82,6 +86,8 @@ function listFilesRecursive(Google\Service\Drive $drive, string $folderId, strin
 		$params = [
 			'q'      => "'{$folderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed=false",
 			'fields' => 'nextPageToken, files(id, name)',
+			'supportsAllDrives' => true,
+			'includeItemsFromAllDrives' => true,
 		];
 		if ($pageToken) $params['pageToken'] = $pageToken;
 		$res = $drive->files->listFiles($params);

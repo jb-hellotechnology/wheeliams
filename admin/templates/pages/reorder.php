@@ -39,7 +39,8 @@ if($_SERVER['REQUEST_METHOD'] === 'POST' && wheeliams_can_order()){
 			$_POST['ctype'] ?? '',
 			$_POST['ptype'] ?? '',
 			$isPO,
-			$Session->get('memberID')
+			$Session->get('memberID'),
+			(int)($_POST['template'] ?? 0)
 		);
 		if($poID){
 			PerchUtil::redirect('/purchase-orders/?po='.$poID);
@@ -48,33 +49,20 @@ if($_SERVER['REQUEST_METHOD'] === 'POST' && wheeliams_can_order()){
 	}
 }
 
-// TEST HOOK: ?demo=<partCode|id>&qty=N injects demand and runs an analysis without Shopify. Remove after testing.
-$demoRunID = 0;
-if(!empty($_GET['demo']) && wheeliams_can_order()){
-	$Session   = PerchMembers_Session::fetch();
-	$demand    = wheeliams_demo_demand($_GET['demo'], (float)($_GET['qty'] ?? 1));
-	$demoRunID = $Analysis->run($Session->get('memberID'), 'DEMO', $demand);
-}
-
 perch_layout('header');
 
 $runID = (int)($_GET['run'] ?? 0);
-if(!$runID && $demoRunID){ $runID = $demoRunID; }
 if(!$runID){ $runID = $Analysis->latestRunID(); }
 ?>
 <main class="full">
-	<h1>Order Analysis &amp; Reorder List</h1>
-	<?php
-	if(!empty($_GET['demo'])){
-		wheeliams_demo_diagnostic($_GET['demo'], (float)($_GET['qty'] ?? 1));
-	}
-	?>
-
-	<form method="post" action="/reorder/" class="flow">
-		<input type="hidden" name="action" value="run_analysis">
-		<button type="submit" class="button primary">Run Analysis Now</button>
-		<small class="help">Reads saleable products currently on order from Shopify and builds a reorder list.</small>
-	</form>
+	<h1 class="with-button">
+		<span>Order Analysis &amp; Reorder List</span>
+		<form method="post" action="/reorder/" class="flow">
+			<input type="hidden" name="action" value="run_analysis">
+			<button type="submit" class="button primary">Run Analysis Now</button>
+			<!-- <small class="help">Reads saleable products currently on order from Shopify and builds a reorder list.</small> -->
+		</form>
+	</h1>
 
 	<?php
 	if(($_GET['saved'] ?? '') === '1'){
@@ -87,26 +75,28 @@ if(!$runID){ $runID = $Analysis->latestRunID(); }
 	// Run selector
 	$runs = $Analysis->allRuns();
 	if($runs){
-		echo '<form method="get" action="/reorder/" class="flow"><label for="run">Analysis run</label> ';
-		echo '<select name="run" id="run" onchange="this.form.submit()">';
+		echo '<section><form method="get" action="/reorder/"><header><h2>Analysis Run</h2></header><article>';
+		echo '<label for="run">Select</label><select name="run" id="run">';
 		foreach($runs as $r){
 			$rid = (int)$r['perch3_wheeliams_analysis_runID'];
 			$sel = ($rid === $runID) ? ' selected' : '';
 			echo '<option value="'.$rid.'"'.$sel.'>#'.$rid.' — '.htmlspecialchars($r['created_at']).'</option>';
 		}
-		echo '</select></form>';
+		echo '</select></article><footer><input type="submit" value="Select" class="button primary" /></footer></form></section>';
 	}
 
 	if($runID){
 		$info = $Analysis->runInfo($runID);
 		if($info){
-			echo '<h2>Reorder list — run #'.$runID.' ('.htmlspecialchars($info['created_at']).')</h2>';
+			echo '<section><header><h2>Reorder list — run #'.$runID.'</h2></header><article><p><strong>Created at:</strong> '.htmlspecialchars($info['created_at']).'</p>';
 		}
 		wheeliams_reorder_list_table($runID);
 
+		echo '</article></section>';
+		
 		// ---- Generate order email (preview only) ----
 		$templates = wheeliams_email_templates();
-		echo '<hr><h2>Generate Order Email</h2>';
+		echo '<section><header><h2>Generate Order Email</h2></header><article>';
 		if(!$templates){
 			echo '<p>No email templates yet. <a href="/settings/email-templates/?new=1">Create one</a> first.</p>';
 		}else{
@@ -114,7 +104,7 @@ if(!$runID){ $runID = $Analysis->latestRunID(); }
 			$types     = wheeliams_run_types($runID);
 			$processes = wheeliams_run_process_types($runID);
 
-			echo '<form method="get" action="/reorder/" class="flow order-email-picker">';
+			echo '<form method="get" action="/reorder/" class="order-email-picker">';
 			echo '<input type="hidden" name="run" value="'.(int)$runID.'">';
 			echo '<input type="hidden" name="preview" value="1">';
 
@@ -154,19 +144,20 @@ if(!$runID){ $runID = $Analysis->latestRunID(); }
 			}
 			echo '</select> ';
 
-			echo '<button type="submit" class="button primary">Preview Email</button>';
+			echo '</article><footer><button type="submit" class="button primary">Preview Email</button></footer>';
 			echo '</form>';
-
-			if(!empty($_GET['preview'])){
-				wheeliams_order_email_preview(
-					$runID,
-					$_GET['supplier'] ?? '',
-					$_GET['ctype'] ?? '',
-					$_GET['ptype'] ?? '',
-					(($_GET['otype'] ?? '') === 'po'),
-					(int)($_GET['template'] ?? 0)
-				);
-			}
+		}
+		echo '<footer></footer></section>';
+		
+		if(!empty($_GET['preview'])){
+			wheeliams_order_email_preview(
+				$runID,
+				$_GET['supplier'] ?? '',
+				$_GET['ctype'] ?? '',
+				$_GET['ptype'] ?? '',
+				(($_GET['otype'] ?? '') === 'po'),
+				(int)($_GET['template'] ?? 0)
+			);
 		}
 	}else{
 		echo '<p>No analysis has been run yet. Use <strong>Run Analysis Now</strong> to create the first reorder list.</p>';

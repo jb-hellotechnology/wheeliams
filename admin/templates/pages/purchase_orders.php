@@ -73,18 +73,18 @@ if($poID){
 
 	// Search + supplier filter
 	$q = trim($_GET['q'] ?? '');
-	echo '<form method="get" action="/purchase-orders/" class="flow no-print">';
-	echo '<label for="q">Search</label> <input type="text" name="q" id="q" value="'.htmlspecialchars($q).'" placeholder="Number or supplier"> ';
-
-	echo '<label for="supplier">Supplier</label> <select name="supplier" id="supplier" onchange="this.form.submit()"><option value="">All</option>';
-	foreach($PO->suppliersWithOrders() as $s){
-		$sid = (int)$s['supplierID'];
-		$sel = ((string)$sid === (string)($_GET['supplier'] ?? '')) ? ' selected' : '';
-		echo '<option value="'.$sid.'"'.$sel.'>'.htmlspecialchars($s['supplierName'] ?: '—').'</option>';
-	}
-	echo '</select> ';
-	echo '<button type="submit" class="button">Search</button>';
-	echo '</form>';
+// 	echo '<form method="get" action="/purchase-orders/" class="flow no-print">';
+// 	echo '<label for="q">Search</label> <input type="text" name="q" id="q" value="'.htmlspecialchars($q).'" placeholder="Number or supplier"> ';
+// 
+// 	echo '<label for="supplier">Supplier</label> <select name="supplier" id="supplier" onchange="this.form.submit()"><option value="">All</option>';
+// 	foreach($PO->suppliersWithOrders() as $s){
+// 		$sid = (int)$s['supplierID'];
+// 		$sel = ((string)$sid === (string)($_GET['supplier'] ?? '')) ? ' selected' : '';
+// 		echo '<option value="'.$sid.'"'.$sel.'>'.htmlspecialchars($s['supplierName'] ?: '—').'</option>';
+// 	}
+// 	echo '</select> ';
+// 	echo '<button type="submit" class="button">Search</button>';
+// 	echo '</form>';
 
 	if($q !== ''){
 		// Simple search view
@@ -92,7 +92,11 @@ if($poID){
 		if(!$rows){
 			echo '<p>No orders match &ldquo;'.htmlspecialchars($q).'&rdquo;.</p>';
 		}else{
-			echo '<div class="table-container"><table class="datatable"><thead class="first-row"><th>Number</th><th>Type</th><th>Supplier</th><th>Date</th><th>Status</th><th></th></thead><tbody>';
+			echo '<section>';
+			echo '<header>';
+			echo '<h2>Items</h2>';
+			echo '</header>';
+			echo '<div class="table-container compact"><table class="datatable"><thead class="first-row"><th>Number</th><th>Type</th><th>Supplier</th><th>Date</th><th>Status</th><th></th></thead><tbody>';
 			foreach($rows as $r){
 				$id = (int)$r['perch3_wheeliams_purchase_orderID'];
 				echo '<tr>';
@@ -105,6 +109,7 @@ if($poID){
 				echo '</tr>';
 			}
 			echo '</tbody></table></div>';
+			echo '</section>';
 		}
 	}else{
 		$supplierFilter = !empty($_GET['supplier']) ? (int)$_GET['supplier'] : null;

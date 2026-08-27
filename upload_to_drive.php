@@ -49,6 +49,8 @@ function findOrCreateFolder(Google\Service\Drive $drive, string $name, string $p
 				  . " and '{$parentId}' in parents"
 				  . " and trashed=false",
 		'fields' => 'files(id)',
+			'supportsAllDrives' => true,
+			'includeItemsFromAllDrives' => true,
 	]);
 
 	if (count($results->getFiles()) > 0) {
@@ -62,7 +64,7 @@ function findOrCreateFolder(Google\Service\Drive $drive, string $name, string $p
 		'parents'  => [$parentId],
 	]);
 
-	$created = $drive->files->create($folder, ['fields' => 'id']);
+	$created = $drive->files->create($folder, ['fields' => 'id', 'supportsAllDrives' => true]);
 	return $created->getId();
 }
 
@@ -86,6 +88,7 @@ try {
 		'mimeType'   => $mimeType,
 		'uploadType' => 'multipart',
 		'fields'     => 'id, name, webViewLink',
+		'supportsAllDrives' => true,
 	]);
 
 	echo json_encode([

@@ -1839,7 +1839,7 @@
 		// Process + supplier/cost columns are only shown on the editable (admin) BOM.
 		$canCost = $editable && wheeliams_can_order();
 
-		echo '<div class="table-container"><table class="datatable bom-explosion">';
+		echo '<div class="table-container compact"><table class="datatable bom-explosion">';
 		echo '<thead class="first-row">';
 		echo '<th>Part Code</th><th>Description</th><th>Qty</th><th>UOM</th><th>Material</th>';
 		if($editable){ echo '<th>Process</th>'; }
@@ -1928,97 +1928,78 @@
 	 * Order Analysis (Phase 3)
 	 * ------------------------------------------------------------------- */
 
-	/* Shopify store + token. Override in secrets.php to keep them out of the repo. */
-	function wheeliams_shopify_get($path){
-		if(!defined('WHEELIAMS_SHOPIFY_STORE')) define('WHEELIAMS_SHOPIFY_STORE', 'wheeliamsltd.myshopify.com');
-		if(!defined('WHEELIAMS_SHOPIFY_TOKEN')) define('WHEELIAMS_SHOPIFY_TOKEN', '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');
-
-		$ch = curl_init();
-		curl_setopt($ch, CURLOPT_URL, 'https://'.WHEELIAMS_SHOPIFY_STORE.'/admin/api/2023-10/'.ltrim($path, '/'));
-		curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-		curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'GET');
-		curl_setopt($ch, CURLOPT_HTTPHEADER, array('X-Shopify-Access-Token: '.WHEELIAMS_SHOPIFY_TOKEN));
-		$body = curl_exec($ch);
-		curl_close($ch);
-		return json_decode($body, true);
+	/*
+	 * Shopify GraphQL Admin API call. Delegates to the shared helper in
+	 * /shopify-graphql.php, which handles the Dev Dashboard client-credentials
+	 * token (fetched + cached, ~24h) and secrets.php config in one place.
+	 */
+	function wheeliams_shopify_graphql($query, $variables = array()){
+		include_once $_SERVER['DOCUMENT_ROOT'].'/shopify-graphql.php';
+		return wheeliams_shopify_gql($query, $variables);
 	}
 
 	/*
 	 * Saleable products currently on order, from Shopify open orders.
 	 * Matches each order line to a Perch component by partCode == line SKU.
 	 * Returns [componentID => ['component'=>row, 'qty'=>fulfillable qty on order]].
+	 * Uses the GraphQL Admin API (REST orders endpoint is deprecated); paginates
+	 * open orders and reads each line's unfulfilledQuantity (≈ REST fulfillable_quantity).
 	 */
 	function wheeliams_demand_on_order(){
 		$Components = new Wheeliams_Components();
 		$demand = array();
 
-		$res = wheeliams_shopify_get('orders.json?status=open&limit=250');
-		foreach(($res['orders'] ?? array()) as $order){
-			foreach(($order['line_items'] ?? array()) as $item){
-				$qty = (float)($item['fulfillable_quantity'] ?? 0);
-				if($qty <= 0) continue;
-				$sku = trim($item['sku'] ?? '');
-				if($sku === '') continue;
+		$query = <<<'GRAPHQL'
+query($cursor: String) {
+  orders(first: 15, after: $cursor, query: "status:open", sortKey: CREATED_AT) {
+    pageInfo { hasNextPage endCursor }
+    edges {
+      node {
+        lineItems(first: 50) {
+          edges {
+            node {
+              sku
+              unfulfilledQuantity
+            }
+          }
+        }
+      }
+    }
+  }
+}
+GRAPHQL;
 
-				$c = $Components->bySku($sku); // match by SKU (first 8 chars = part-code base)
-				if(!$c) continue;
+		$cursor = null;
+		$guard = 0; // hard stop against runaway pagination
+		do{
+			$res = wheeliams_shopify_graphql($query, array('cursor' => $cursor));
+			$orders = $res['data']['orders'] ?? null;
+			if(!$orders) break; // token/query error → return whatever we have
 
-				$id = (int)$c['perch3_wheeliams_componentID'];
-				if(!isset($demand[$id])){
-					$demand[$id] = array('component' => $c, 'qty' => 0);
+			foreach(($orders['edges'] ?? array()) as $edge){
+				foreach(($edge['node']['lineItems']['edges'] ?? array()) as $liEdge){
+					$item = $liEdge['node'];
+					$qty = (float)($item['unfulfilledQuantity'] ?? 0);
+					if($qty <= 0) continue;
+					$sku = trim($item['sku'] ?? '');
+					if($sku === '') continue;
+
+					$c = $Components->bySku($sku); // match by SKU (first 8 chars = part-code base)
+					if(!$c) continue;
+
+					$id = (int)$c['perch3_wheeliams_componentID'];
+					if(!isset($demand[$id])){
+						$demand[$id] = array('component' => $c, 'qty' => 0);
+					}
+					$demand[$id]['qty'] += $qty;
 				}
-				$demand[$id]['qty'] += $qty;
 			}
-		}
+
+			$hasNext = !empty($orders['pageInfo']['hasNextPage']);
+			$cursor  = $orders['pageInfo']['endCursor'] ?? null;
+		}while($hasNext && $cursor && ++$guard < 200);
+
 		return $demand;
-	}
-
-	/*
-	 * TEST HOOK: build injected demand for one product (by part code or id),
-	 * so the reorder pipeline can be exercised without a live Shopify order.
-	 * Remove once testing is done.
-	 */
-	function wheeliams_demo_demand($idOrCode, $qty){
-		$Components = new Wheeliams_Components();
-		$c = ctype_digit((string)$idOrCode) ? $Components->component($idOrCode) : $Components->byPartCode($idOrCode);
-		if(!$c) return array();
-		$id = (int)$c['perch3_wheeliams_componentID'];
-		return array($id => array('component' => $c, 'qty' => (float)$qty));
-	}
-
-	/* TEST HOOK: explain whether a demo product would flag and produce reorder lines. */
-	function wheeliams_demo_diagnostic($idOrCode, $qty){
-		$Components = new Wheeliams_Components();
-		$Stock = new Wheeliams_Stock();
-		$Boms  = new Wheeliams_Boms();
-
-		$c = ctype_digit((string)$idOrCode) ? $Components->component($idOrCode) : $Components->byPartCode($idOrCode);
-		if(!$c){
-			echo '<p class="alert warning">Demo: no component found for "'.htmlspecialchars($idOrCode).'".</p>';
-			return;
-		}
-		$id      = (int)$c['perch3_wheeliams_componentID'];
-		$dyn     = json_decode($c['dynamicFields'], true) ?: array();
-		$stock   = $Stock->level($id);
-		$planned = $Stock->planned($id);
-		$reorder = (float)($dyn['reorder_quantity'] ?? 0);
-		$max     = (float)($dyn['maximum_stock_level'] ?? 0);
-		$onOrder = (float)$qty;
-		$flagged = (($stock - $onOrder) <= $reorder);
-		$target  = $max - $stock - $planned;
-		$bomCount = count((array)$Boms->bom($id));
-
-		echo '<section class="flow"><header><h2>Demo diagnostic</h2></header><article>';
-		echo '<dl class="stock-info">';
-		echo '<dt>Product</dt><dd>'.htmlspecialchars($c['partCode']).' (#'.$id.', type '.htmlspecialchars($c['type']).')</dd>';
-		echo '<dt>On order (demo)</dt><dd>'.wheeliams_num($onOrder).'</dd>';
-		echo '<dt>Current stock</dt><dd>'.wheeliams_num($stock).'</dd>';
-		echo '<dt>Reorder qty</dt><dd>'.wheeliams_num($reorder).'</dd>';
-		echo '<dt>Max stock</dt><dd>'.wheeliams_num($max).'</dd>';
-		echo '<dt>Flagged for reorder?</dt><dd>'.($flagged ? 'Yes' : 'No — (stock − on order) is above the reorder level').'</dd>';
-		echo '<dt>Target qty (max − stock − planned)</dt><dd>'.wheeliams_num($target).($target <= 0 ? ' — must be &gt; 0 to reorder' : '').'</dd>';
-		echo '<dt>Direct BOM lines</dt><dd>'.$bomCount.($bomCount === 0 ? ' — no BOM, so this item will be reordered directly (as a purchased item / raw material).' : ' — the BOM components will be reordered.').'</dd>';
-		echo '</dl></article></section>';
 	}
 
 	/*
@@ -2038,7 +2019,8 @@
 		$Analysis = new Wheeliams_Analysis();
 		$lines = $Analysis->lines($runID);
 		if(!$lines){ echo '<p>No components were flagged for reorder in this run.</p>'; return; }
-
+		echo '<div class="table-container compact">';
+		echo '<section>';
 		echo '<form method="post" action="/reorder/" class="flow">';
 		echo '<input type="hidden" name="action" value="update_aq">';
 		echo '<input type="hidden" name="run" value="'.(int)$runID.'">';
@@ -2062,6 +2044,8 @@
 		echo '</tbody></table></div>';
 		echo '<footer><button type="submit" class="button primary">Save order quantities</button></footer>';
 		echo '</form>';
+		echo '</section>';
+		echo '</div>';
 	}
 
 	/* ---------------------------------------------------------------------
@@ -2186,7 +2170,11 @@
 			$Suppliers = new Wheeliams_Suppliers();
 			$s = $Suppliers->supplier($supplierID);
 			$sdyn = $s ? (json_decode($s['dynamicFields'], true) ?: array()) : array();
-			$supplierEmail = $sdyn['email'] ?? '';
+			// Prefer the supplier's ORDERING contact (the address orders actually send to);
+			// fall back to the general email field where no ORDERING contact exists.
+			$ordering = $Suppliers->orderingContact($supplierID);
+			$orderingEmail = $ordering ? trim($ordering['email']) : '';
+			$supplierEmail = $orderingEmail !== '' ? $orderingEmail : ($sdyn['email'] ?? '');
 		}
 
 		$number    = wheeliams_peek_number($isPO);
@@ -2208,18 +2196,19 @@
 		$to      = wheeliams_render_placeholders($tpl['email_to'], $vars);
 		$bcc     = wheeliams_render_placeholders($tpl['email_bcc'], $vars);
 		$subject = wheeliams_render_placeholders($tpl['subject'], $vars);
-		$content = wheeliams_render_placeholders($tpl['content'], $vars);
+		// nl2br the content text before {ORDER_TABLE} is substituted, so the table HTML isn't broken up.
+		$content = wheeliams_render_placeholders(nl2br($tpl['content']), $vars);
 
 		echo '<section class="email-preview flow">';
 		echo '<header><h2>Email preview &mdash; '.htmlspecialchars($orderType).' '.htmlspecialchars($number).'</h2></header>';
 		echo '<article class="flow">';
 		echo '<dl class="stock-info">';
-		echo '<dt>To</dt><dd>'.htmlspecialchars($to ?: '—').'</dd>';
-		echo '<dt>BCC</dt><dd>'.htmlspecialchars($bcc ?: '—').'</dd>';
-		echo '<dt>Subject</dt><dd>'.htmlspecialchars($subject).'</dd>';
-		echo '<dt>Reference</dt><dd>'.htmlspecialchars($reference).'</dd>';
+		echo '<dt>To:</dt><dd>'.htmlspecialchars($to ?: '—').'</dd>';
+		echo '<dt>BCC:</dt><dd>'.htmlspecialchars($bcc ?: '—').'</dd>';
+		echo '<dt>Subject:</dt><dd>'.htmlspecialchars($subject).'</dd>';
+		echo '<dt>Reference:</dt><dd>'.htmlspecialchars($reference).'</dd>';
 		echo '</dl>';
-		echo '<div class="email-body" style="border:1px solid #ccc;padding:1rem">'.$content.'</div>';
+		echo '<div class="email-body">'.$content.'</div>';
 
 		echo '<h3>Attachments (from Google Drive)</h3>';
 		if(!empty($tpl['attachments'])){
@@ -2243,6 +2232,7 @@
 			echo '<input type="hidden" name="ctype" value="'.htmlspecialchars((string)$type).'">';
 			echo '<input type="hidden" name="ptype" value="'.htmlspecialchars((string)$process).'">';
 			echo '<input type="hidden" name="otype" value="'.($isPO ? 'po' : 'enquiry').'">';
+			echo '<input type="hidden" name="template" value="'.(int)$templateID.'">'; // chosen here, persisted onto the PO
 			echo '<button type="submit" class="button primary">Save as '.htmlspecialchars($orderType).'</button>';
 			echo '</form>';
 		}else{
@@ -2275,7 +2265,7 @@
 	}
 
 	/* Save a supplier's filtered reorder lines as a PO / enquiry. Returns PO id (0 if not saved). */
-	function wheeliams_save_purchase_order($runID, $supplierID, $type, $process, $isPO, $memberID){
+	function wheeliams_save_purchase_order($runID, $supplierID, $type, $process, $isPO, $memberID, $templateID = 0){
 		// A PO is per-supplier — require a specific supplier, not "All".
 		if($supplierID === '' || $supplierID === null) return 0;
 
@@ -2287,7 +2277,7 @@
 
 		$supplierName = $lines[0]['supplierName'] ?: 'Supplier';
 		$number = wheeliams_consume_number($isPO); // consume only once we're sure we'll save
-		return $PO->createFromLines($number, !$isPO, $supplierID, $supplierName, $type, $process, $runID, $lines, $memberID);
+		return $PO->createFromLines($number, !$isPO, $supplierID, $supplierName, $type, $process, $runID, $lines, $memberID, $templateID);
 	}
 
 	/* Table of all purchase orders (optionally filtered by supplier). */
@@ -2295,7 +2285,12 @@
 		$PO = new Wheeliams_Purchase_Orders();
 		$rows = $PO->orders($supplierFilter);
 		if(!$rows){ echo '<p>No purchase orders yet.</p>'; return; }
-		echo '<div class="table-container"><table class="datatable">';
+		echo '<section>';
+		echo '<header>';
+		echo '<h2>Items</h2>';
+		echo '</header>';
+		echo '<article>';
+		echo '<div class="table-container compact"><table class="datatable">';
 		echo '<thead class="first-row"><th>Number</th><th>Type</th><th>Supplier</th><th>Date</th><th>Status</th><th></th></thead><tbody>';
 		foreach($rows as $r){
 			$id = (int)$r['perch3_wheeliams_purchase_orderID'];
@@ -2309,6 +2304,8 @@
 			echo '</tr>';
 		}
 		echo '</tbody></table></div>';
+		echo '</article>';
+		echo '</section>';
 	}
 
 	/* Full purchase order: header, lines, check-in form, print + drawing links. */
@@ -2319,27 +2316,48 @@
 		$lines = $PO->lines($poID);
 		$typeLabel = $po['is_enquiry'] ? 'Enquiry' : 'Purchase Order';
 
-		echo '<p class="no-print"><a href="/purchase-orders/" class="button back">&larr; All orders</a> ';
-		echo '<button type="button" class="button" onclick="window.print()">Print</button></p>';
+		// Fully received = every line checked in. Once complete, re-sending and
+		// checking in are redundant, so those controls are hidden below.
+		$allReceived = !empty($lines);
+		foreach($lines as $l){
+			if(empty($l['checked_in'])){ $allReceived = false; break; }
+		}
 
+		echo '<section>';
+		echo '<header>';
+		echo $typeLabel;
+		echo '</header>';
+		echo '<article>';
 		echo '<dl class="stock-info">';
-		echo '<dt>'.$typeLabel.' number</dt><dd>'.htmlspecialchars($po['number']).'</dd>';
-		echo '<dt>Supplier</dt><dd>'.htmlspecialchars($po['supplierName'] ?: '—').'</dd>';
-		echo '<dt>Date</dt><dd>'.htmlspecialchars($po['created_at']).'</dd>';
-		echo '<dt>Reference</dt><dd>'.htmlspecialchars($po['reference']).'</dd>';
-		echo '<dt>Status</dt><dd>'.htmlspecialchars(ucfirst(str_replace('-', ' ', $po['status']))).'</dd>';
+		echo '<dt>'.$typeLabel.' number:</dt><dd>'.htmlspecialchars($po['number']).'</dd>';
+		echo '<dt>Supplier:</dt><dd>'.htmlspecialchars($po['supplierName'] ?: '—').'</dd>';
+		echo '<dt>Date:</dt><dd>'.htmlspecialchars($po['created_at']).'</dd>';
+		echo '<dt>Reference:</dt><dd>'.htmlspecialchars($po['reference']).'</dd>';
+		echo '<dt>Status:</dt><dd>'.htmlspecialchars(ucfirst(str_replace('-', ' ', $po['status']))).'</dd>';
 		if(!empty($po['sent_at'])){
-			echo '<dt>Sent</dt><dd>'.htmlspecialchars($po['sent_at']).' to '.htmlspecialchars($po['sent_to'] ?: '—').'</dd>';
+			echo '<dt>Sent:</dt><dd>'.htmlspecialchars($po['sent_at']).' to '.htmlspecialchars($po['sent_to'] ?: '—').'</dd>';
 		}
 		echo '</dl>';
+		echo '</article>';
+		//echo '<footer>';
+		//echo '<button type="button" class="button" onclick="window.print()">Print</button>';
+		//echo '</footer>';
+		echo '</section>';
+		
+		echo '<a href="/purchase-orders/" class="button back">&larr; All orders</a>';
 
-		// Send to supplier (Brevo). Templates supply the wording; parts' Drive files attach.
+		
+
+		// Send to supplier (Brevo). The template was chosen on the Reorder page and saved
+		// onto this order; the parts' Drive files attach at send time.
 		$templates = wheeliams_email_templates();
-		echo '<section class="flow no-print"><header><h2>Send to Supplier</h2></header><article class="flow">';
+		echo '<section class="flow no-print email-preview"><header><h2>Send to Supplier</h2></header><article>';
 
 		// The order email goes to the supplier's ORDERING contact — require one.
 		$Suppliers = new Wheeliams_Suppliers();
 		$ordering  = $po['supplierID'] ? $Suppliers->orderingContact($po['supplierID']) : null;
+
+		$sendTemplateID = 0; // resolved below; drives the send form in the footer
 
 		if(!$ordering || trim($ordering['email']) === ''){
 			echo '<p class="alert warning">This supplier has no <strong>ORDERING</strong> contact with an email address. Add one before this order can be sent.</p>';
@@ -2351,22 +2369,46 @@
 		}elseif(!$templates){
 			echo '<p>No email templates yet. <a href="/settings/email-templates/?new=1">Create one</a> first.</p>';
 		}else{
-			$oname = trim(($ordering['first_name'] ?? '').' '.($ordering['last_name'] ?? ''));
-			echo '<p>Will send to '.($oname !== '' ? '<strong>'.htmlspecialchars($oname).'</strong> ' : '').'&lt;'.htmlspecialchars($ordering['email']).'&gt; <small>(ORDERING contact)</small></p>';
+			// The template chosen on the Reorder page. Fall back to the first template for
+			// orders saved before the template was stored on the PO.
+			$tpl = null;
+			foreach($templates as $t){
+				if((int)$t['perch3_wheeliams_email_templateID'] === (int)$po['template_id']){ $tpl = $t; break; }
+			}
+			$isFallback = !$tpl;
+			if(!$tpl){ $tpl = reset($templates); }
+			$sendTemplateID = (int)$tpl['perch3_wheeliams_email_templateID'];
+
+			// Full message preview, built by the same code that sends it.
+			include_once $_SERVER['DOCUMENT_ROOT'].'/admin/addons/apps/wheeliams/Wheeliams.orderemail.class.php';
+			$Mailer = new Wheeliams_Order_Email();
+			$pv = $Mailer->preview($po, $lines, $tpl);
+			echo '<dl class="stock-info">';
+			echo '<dt>To:</dt><dd>'.htmlspecialchars($pv['to'] ?: '—').'</dd>';
+			echo '<dt>BCC:</dt><dd>'.htmlspecialchars($pv['bcc'] ?: '—').'</dd>';
+			echo '<dt>Subject:</dt><dd>'.htmlspecialchars($pv['subject'] ?: '—').'</dd>';
+			echo '<dt>Reference:</dt><dd>'.htmlspecialchars($po['reference']).'</dd>';
+			echo '<dt>Template:</dt><dd>'.htmlspecialchars($tpl['name']).'</dd>';
+			echo '</dl>';
+			echo '<div class="email-body">'.$pv['html'].'</div>';
+		}
+		echo '</article>';
+		if($sendTemplateID && !$allReceived){
+			echo '<footer>';
 			echo '<form method="post" action="/purchase-orders/?po='.(int)$poID.'">';
 			echo '<input type="hidden" name="action" value="send_email">';
 			echo '<input type="hidden" name="po" value="'.(int)$poID.'">';
-			echo '<label for="template">Email template</label> <select name="template" id="template">';
-			foreach($templates as $tpl){
-				echo '<option value="'.(int)$tpl['perch3_wheeliams_email_templateID'].'">'.htmlspecialchars($tpl['name']).'</option>';
-			}
-			echo '</select> ';
+			echo '<input type="hidden" name="template" value="'.$sendTemplateID.'">';
 			$label = !empty($po['sent_at']) ? 'Re-send to Supplier' : 'Send to Supplier';
 			echo '<button type="submit" class="button primary" onclick="return confirm(\'Send this order to the supplier now?\')">'.$label.'</button>';
 			echo '</form>';
+			echo '</footer>';
 		}
-		echo '</article></section>';
+		echo '</section>';
 
+		echo '<section>';
+		echo '<header>Lines</header>';
+		echo '<article>';
 		echo '<form method="post" action="/purchase-orders/?po='.(int)$poID.'" class="flow">';
 		echo '<input type="hidden" name="action" value="checkin">';
 		echo '<input type="hidden" name="po" value="'.(int)$poID.'">';
@@ -2389,30 +2431,68 @@
 				echo '<td><input type="checkbox" name="checked['.$lid.']" value="1"></td>';
 			}
 			$dt = wheeliams_drive_type($line['type']);
-			echo '<td class="no-print"><button type="button" class="button small" onclick="wheeliamsFiles(this,\''.htmlspecialchars($line['partCode'], ENT_QUOTES).'\',\''.htmlspecialchars($dt, ENT_QUOTES).'\')">Files</button><div class="po-files"></div></td>';
+			echo '<td class="no-print"><button type="button" class="button small" onclick="wheeliamsPoFiles(\''.htmlspecialchars($line['partCode'], ENT_QUOTES).'\',\''.htmlspecialchars($dt, ENT_QUOTES).'\')">Files</button></td>';
 			echo '</tr>';
 		}
 		echo '</tbody></table></div>';
-		echo '<footer class="no-print"><button type="submit" class="button primary">Check In Ticked Lines</button></footer>';
-		echo '</form>';
 
-		// Self-contained Drive file loader — loads on click only (the endpoint moves files as a side effect).
+		if(!$allReceived){
+			echo '<footer class="no-print"><button type="submit" class="button primary">Check In Ticked Lines</button></footer>';
+		}else{
+			echo '<footer class="no-print"><p class="alert success">All lines received &mdash; this order is complete.</p></footer>';
+		}
+		echo '</form>';
+		echo '</article>';
+		echo '</section>';
+
+		// Files modal — the "Files" button opens the parts' drawings in an overlay.
+		// Loads on click only (the endpoint moves files into place as a side effect).
 		echo <<<'JS'
+<style>
+.files-modal{ position:fixed; inset:0; z-index:2000; display:none; align-items:center; justify-content:center; }
+.files-modal.open{ display:flex; }
+.files-modal-backdrop{ position:absolute; inset:0; background:rgba(0,0,0,.55); }
+.files-modal-box{ position:relative; background:#fff; max-width:600px; width:90%; max-height:80vh; overflow:auto; padding:1.5rem 1.75rem; border-radius:6px; box-shadow:0 12px 44px rgba(0,0,0,.3); }
+.files-modal-close{ position:absolute; top:.35rem; right:.6rem; border:0; background:none; font-size:1.7rem; line-height:1; cursor:pointer; }
+.files-modal-box h4{ margin:1rem 0 .25rem; }
+</style>
+<div id="poFilesModal" class="files-modal" aria-hidden="true">
+	<div class="files-modal-backdrop" data-close></div>
+	<div class="files-modal-box">
+		<button type="button" class="files-modal-close" data-close aria-label="Close">&times;</button>
+		<h3 id="poFilesModalTitle">Files</h3>
+		<div id="poFilesModalBody">Loading&hellip;</div>
+	</div>
+</div>
 <script>
-function wheeliamsFiles(btn, code, type){
-	var box = btn.nextElementSibling;
-	box.innerHTML = 'Loading…';
+function wheeliamsPoFilesClose(){ document.getElementById('poFilesModal').classList.remove('open'); }
+
+function wheeliamsPoFiles(code, type){
+	var modal = document.getElementById('poFilesModal');
+	document.getElementById('poFilesModalTitle').textContent = code + ' — Files';
+	var body = document.getElementById('poFilesModalBody');
+	body.textContent = 'Loading…';
+	modal.classList.add('open');
 	fetch('/organise_drive_files.php?productCode=' + encodeURIComponent(code) + '&type=' + encodeURIComponent(type))
 		.then(function(r){ return r.json(); })
 		.then(function(d){
-			if(d.error){ box.innerHTML = d.error; return; }
-			if(!d.files || !d.files.length){ box.innerHTML = 'No files.'; return; }
-			box.innerHTML = d.files.map(function(f){
-				return '<a href="' + f.webViewLink + '" target="_blank" rel="noopener">' + f.name + '</a>';
-			}).join('<br>');
+			if(d.error){ body.textContent = d.error; return; }
+			if(!d.files || !d.files.length){ body.textContent = 'No files found.'; return; }
+			var groups = {};
+			d.files.forEach(function(f){ var cat = f.path || 'Files'; (groups[cat] = groups[cat] || []).push(f); });
+			var html = '';
+			Object.keys(groups).sort().forEach(function(cat){
+				html += '<h4>' + cat + '</h4><ul>';
+				groups[cat].forEach(function(f){ html += '<li><a href="' + f.webViewLink + '" target="_blank" rel="noopener">' + f.name + '</a></li>'; });
+				html += '</ul>';
+			});
+			body.innerHTML = html;
 		})
-		.catch(function(){ box.innerHTML = 'Error loading files.'; });
+		.catch(function(){ body.textContent = 'Error loading files.'; });
 }
+
+document.addEventListener('click', function(e){ if(e.target.hasAttribute('data-close')) wheeliamsPoFilesClose(); });
+document.addEventListener('keydown', function(e){ if(e.key === 'Escape') wheeliamsPoFilesClose(); });
 </script>
 JS;
 	}

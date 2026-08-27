@@ -34,10 +34,9 @@ if(!empty($_GET['edit']) || isset($_GET['new'])){
 
 }else{
 
-	echo '<p><a href="/settings/email-templates/?new=1" class="button primary">New Template</a></p>';
 	$all = $Templates->templates();
 	if($all){
-		echo '<div class="table-container"><table class="datatable">';
+		echo '<div class="table-container compact"><table class="datatable">';
 		echo '<thead class="first-row"><th>Name</th><th>Subject</th><th>Edit</th><th>Delete</th></thead><tbody>';
 		foreach($all as $t){
 			$id = (int)$t['perch3_wheeliams_email_templateID'];
@@ -45,13 +44,15 @@ if(!empty($_GET['edit']) || isset($_GET['new'])){
 			echo '<td>'.htmlspecialchars($t['name']).'</td>';
 			echo '<td>'.htmlspecialchars($t['subject']).'</td>';
 			echo '<td><a href="/settings/email-templates/?edit=1&id='.$id.'">Edit</a></td>';
-			echo '<td><a href="/settings/email-templates/?delete=1&id='.$id.'" class="warning">Delete</a></td>';
+			echo '<td><a href="/settings/email-templates/?delete=1&id='.$id.'" class="warning" onclick="return confirm(\'Are you sure?\');">Delete</a></td>';
 			echo '</tr>';
 		}
 		echo '</tbody></table></div>';
 	}else{
 		echo '<p><em>No templates yet.</em></p>';
 	}
+	
+	echo '<p><a href="/settings/email-templates/?new=1" class="button primary">New Template</a></p>';
 
 }
 ?>

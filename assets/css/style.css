@@ -160,7 +160,7 @@ h1 time{
 
 h1.with-button{
 	display:grid;
-	grid-template-columns: auto 140px;
+	grid-template-columns: auto 240px;
 }
 
 @media screen and (max-width:768px){
@@ -1950,4 +1950,13 @@ form.fixed-submit footer{
 	backdrop-filter: blur(3px);
 	background:rgba(255,255,255,0.8);
 	bottom:0;
+}
+
+.email-preview{
+	font-family: monospace;
+}
+
+.email-preview h3{
+	font-family: monospace;
+	max-width:48ch;
 }

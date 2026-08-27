@@ -1,4 +1,6 @@
 <?php
+include_once $_SERVER['DOCUMENT_ROOT'].'/secrets.php';
+include_once $_SERVER['DOCUMENT_ROOT'].'/shopify-graphql.php';
 
 ini_set('display_errors', 1);
 ini_set('display_startup_errors', 1);
@@ -16,26 +18,33 @@ if ($conn->connect_error) {
   die("Connection failed: " . $conn->connect_error);
 }
 
+/*
+ * Fetch a product's metafields via GraphQL and return them as a JSON string in
+ * the same {"metafields":[...]} envelope the old REST call produced, so anything
+ * reading this column keeps working. addslashes() for the raw INSERT below.
+ */
 function get_metafields($productid){
-	$ch = curl_init();
-	
-	curl_setopt($ch, CURLOPT_URL, 'https://wheeliamsltd.myshopify.com/admin/api/2024-04/products/'.$productid.'/metafields.json');
-	curl_setopt($ch, CURLOPT_RETURNTRANSFER, 1);
-	curl_setopt($ch, CURLOPT_CUSTOMREQUEST, 'GET');
-	
-	
-	$headers = array();
-	$headers[] = 'X-Shopify-Access-Token: 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';
-	curl_setopt($ch, CURLOPT_HTTPHEADER, $headers);
-	
-	$data = curl_exec($ch);
-	if (curl_errno($ch)) {
-	    echo 'Error:' . curl_error($ch);
+	$query = <<<'GRAPHQL'
+query($id: ID!) {
+  product(id: $id) {
+    metafields(first: 100) {
+      edges { node { id namespace key value type } }
+    }
+  }
+}
+GRAPHQL;
+
+	$res = wheeliams_shopify_gql($query, array('id' => wheeliams_shopify_gid('Product', $productid)));
+	if(isset($res['errors'])){
+		echo 'Error: '.htmlspecialchars(json_encode($res['errors'])).'<br />';
 	}
-	curl_close($ch);
-	
-	$metafields = $data;
-	return addslashes($metafields);
+
+	$metafields = array();
+	foreach(($res['data']['product']['metafields']['edges'] ?? array()) as $edge){
+		$metafields[] = $edge['node'];
+	}
+
+	return addslashes(json_encode(array('metafields' => $metafields)));
 }
 
 //GET LIST OF PRODUCTS FROM DATABASE
@@ -45,8 +54,8 @@ $result = $conn->query($sql);
 //LOOP THROUGH PRODUCTS
 while($row = mysqli_fetch_assoc($result)) {
 	$metafields = get_metafields($row['productid']);
-	$sql2 = "DELETE FROM metafields WHERE productid='".$row['productid']."'";
+	$sql2 = "DELETE FROM metafields WHERE productid='".$conn->real_escape_string($row['productid'])."'";
 	$result2 = $conn->query($sql2);
-	$sql3 = "INSERT INTO metafields (productid, metafields) VALUES ('".$row['productid']."', '".$metafields."')";
+	$sql3 = "INSERT INTO metafields (productid, metafields) VALUES ('".$conn->real_escape_string($row['productid'])."', '".$metafields."')";
 	$result3 = $conn->query($sql3);
 }

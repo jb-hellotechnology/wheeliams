@@ -48,11 +48,46 @@ class Wheeliams_Order_Email
         if(!filter_var($to, FILTER_VALIDATE_EMAIL)) $to = $orderingEmail; // fall back to the ordering contact
         $bcc     = trim(wheeliams_render_placeholders($template['email_bcc'], $vars));
         $subject = wheeliams_render_placeholders($template['subject'], $vars);
-        $html    = wheeliams_render_placeholders($template['content'], $vars);
+        // nl2br the content text BEFORE substituting {ORDER_TABLE} so the table's own HTML isn't broken up.
+        $html    = wheeliams_render_placeholders(nl2br($template['content']), $vars);
 
         $attachments = $this->attachments($lines);
 
         return $this->brevo($to, $orderingName, $bcc, $subject, $html, $attachments);
+    }
+
+    /*
+     * Build the rendered email exactly as send() would, but WITHOUT contacting
+     * Drive or Brevo — for on-screen preview. Returns the resolved recipient plus
+     * the rendered to/bcc/subject/html, or ['no_ordering'=>true] when the supplier
+     * has no valid ORDERING contact.
+     */
+    public function preview($po, $lines, $template)
+    {
+        $Suppliers = new Wheeliams_Suppliers();
+        $ordering  = $po['supplierID'] ? $Suppliers->orderingContact($po['supplierID']) : null;
+        $orderingEmail = $ordering ? trim($ordering['email']) : '';
+        if(!filter_var($orderingEmail, FILTER_VALIDATE_EMAIL)){
+            return array('no_ordering' => true);
+        }
+        $orderingName = trim(($ordering['first_name'] ?? '').' '.($ordering['last_name'] ?? '')) ?: $po['supplierName'];
+
+        $vars = $this->vars($po, $lines, $orderingEmail);
+
+        $to = trim(wheeliams_render_placeholders($template['email_to'], $vars));
+        if(!filter_var($to, FILTER_VALIDATE_EMAIL)) $to = $orderingEmail;
+        $bcc     = trim(wheeliams_render_placeholders($template['email_bcc'], $vars));
+        $subject = wheeliams_render_placeholders($template['subject'], $vars);
+        $html    = wheeliams_render_placeholders(nl2br($template['content']), $vars);
+
+        return array(
+            'recipient_name'  => $orderingName,
+            'recipient_email' => $orderingEmail,
+            'to'      => $to,
+            'bcc'     => $bcc,
+            'subject' => $subject,
+            'html'    => $html,
+        );
     }
 
     /* Placeholder values for a saved PO. */
@@ -108,6 +143,8 @@ class Wheeliams_Order_Email
         $res = $drive->files->listFiles(array(
             'q'      => "mimeType='application/vnd.google-apps.folder' and name='{$escaped}' and '{$parentId}' in parents and trashed=false",
             'fields' => 'files(id)',
+			'supportsAllDrives' => true,
+			'includeItemsFromAllDrives' => true,
         ));
         $f = $res->getFiles();
         return count($f) ? $f[0]->getId() : null;
@@ -121,6 +158,8 @@ class Wheeliams_Order_Email
             $params = array(
                 'q'      => "'{$folderId}' in parents and mimeType != 'application/vnd.google-apps.folder' and trashed=false",
                 'fields' => 'nextPageToken, files(id, name, size)',
+			'supportsAllDrives' => true,
+			'includeItemsFromAllDrives' => true,
             );
             if($pageToken) $params['pageToken'] = $pageToken;
             $res = $drive->files->listFiles($params);
@@ -136,6 +175,8 @@ class Wheeliams_Order_Email
             $params = array(
                 'q'      => "'{$folderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed=false",
                 'fields' => 'nextPageToken, files(id)',
+			'supportsAllDrives' => true,
+			'includeItemsFromAllDrives' => true,
             );
             if($pageToken) $params['pageToken'] = $pageToken;
             $res = $drive->files->listFiles($params);
@@ -179,7 +220,7 @@ class Wheeliams_Order_Email
                     if(!in_array($ext, $this->attachExtensions, true)) continue;
                     if($file['size'] > 0 && $file['size'] > $budget) continue; // too big alone
 
-                    $content = $drive->files->get($file['id'], array('alt' => 'media'))->getBody()->getContents();
+                    $content = $drive->files->get($file['id'], array('alt' => 'media', 'supportsAllDrives' => true))->getBody()->getContents();
                     $budget -= strlen($content);
                     if($budget < 0) break 2; // hit the size budget
 

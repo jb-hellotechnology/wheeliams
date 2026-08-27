@@ -1,1 +1,1 @@
-<?php include(str_replace('/', DIRECTORY_SEPARATOR, '../admin/templates/pages/default.php')); ?>
+<?php include(str_replace('/', DIRECTORY_SEPARATOR, '../admin/templates/pages/input_settings_home.php')); ?>

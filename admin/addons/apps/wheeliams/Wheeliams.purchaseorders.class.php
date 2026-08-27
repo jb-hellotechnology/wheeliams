@@ -27,6 +27,7 @@ class Wheeliams_Purchase_Orders extends PerchAPI_Factory
             supplierName VARCHAR(191) DEFAULT NULL,
             component_type VARCHAR(32) DEFAULT NULL,
             process_type VARCHAR(191) DEFAULT NULL,
+            template_id INT UNSIGNED DEFAULT NULL,
             runID INT UNSIGNED DEFAULT NULL,
             status VARCHAR(16) NOT NULL DEFAULT 'open',
             created_at DATETIME DEFAULT NULL,
@@ -40,9 +41,10 @@ class Wheeliams_Purchase_Orders extends PerchAPI_Factory
 
         // Add the send-tracking columns to any pre-existing table.
         foreach(array(
-            'sent_at' => 'DATETIME DEFAULT NULL',
-            'sent_by' => 'INT UNSIGNED DEFAULT NULL',
-            'sent_to' => 'VARCHAR(255) DEFAULT NULL',
+            'sent_at'     => 'DATETIME DEFAULT NULL',
+            'sent_by'     => 'INT UNSIGNED DEFAULT NULL',
+            'sent_to'     => 'VARCHAR(255) DEFAULT NULL',
+            'template_id' => 'INT UNSIGNED DEFAULT NULL',
         ) as $col => $def){
             $exists = $this->db->get_row("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='".$this->po_table."' AND COLUMN_NAME='".$col."'");
             if(!$exists){
@@ -70,7 +72,7 @@ class Wheeliams_Purchase_Orders extends PerchAPI_Factory
     }
 
     /* Create a PO from a set of reorder-line rows. Returns the new PO id. */
-    public function createFromLines($number, $isEnquiry, $supplierID, $supplierName, $type, $process, $runID, $lines, $memberID)
+    public function createFromLines($number, $isEnquiry, $supplierID, $supplierName, $type, $process, $runID, $lines, $memberID, $templateID = 0)
     {
         $Components = new Wheeliams_Components();
 
@@ -82,6 +84,7 @@ class Wheeliams_Purchase_Orders extends PerchAPI_Factory
             'supplierName'   => $supplierName,
             'component_type' => $type,
             'process_type'   => $process,
+            'template_id'    => $templateID ? (int)$templateID : null,
             'runID'          => (int)$runID,
             'status'         => 'open',
             'created_at'     => date('Y-m-d H:i:s'),

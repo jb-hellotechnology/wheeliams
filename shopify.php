@@ -1,1 +1,0 @@
-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

@@ -44,6 +44,8 @@ function findOrCreateFolder(Google\Service\Drive $drive, string $name, string $p
 				  . " and '{$parentId}' in parents"
 				  . " and trashed=false",
 		'fields' => 'files(id)',
+			'supportsAllDrives' => true,
+			'includeItemsFromAllDrives' => true,
 	]);
 
 	if (count($results->getFiles()) > 0) {
@@ -56,7 +58,7 @@ function findOrCreateFolder(Google\Service\Drive $drive, string $name, string $p
 		'parents'  => [$parentId],
 	]);
 
-	$created = $drive->files->create($folder, ['fields' => 'id']);
+	$created = $drive->files->create($folder, ['fields' => 'id', 'supportsAllDrives' => true]);
 	return $created->getId();
 }
 
@@ -84,6 +86,8 @@ function organiseFilesByProductCode(
 					   . " and '{$searchFolderId}' in parents"
 					   . " and trashed=false",
 			 'fields' => 'nextPageToken, files(id, name, mimeType, webViewLink)',
+			'supportsAllDrives' => true,
+			'includeItemsFromAllDrives' => true,
 		 ];
  
 		 if ($pageToken) $params['pageToken'] = $pageToken;
@@ -99,7 +103,7 @@ function organiseFilesByProductCode(
  
 	 // 3. Move each matching file into the productCode folder
 	 foreach ($allFiles as $file) {
-		 $fileDetails    = $drive->files->get($file->getId(), ['fields' => 'parents']);
+		 $fileDetails    = $drive->files->get($file->getId(), ['fields' => 'parents', 'supportsAllDrives' => true]);
 		 $currentParents = implode(',', $fileDetails->getParents());
  
 		 $drive->files->update(
@@ -109,6 +113,7 @@ function organiseFilesByProductCode(
 				 'addParents'    => $productFolder,
 				 'removeParents' => $currentParents,
 				 'fields'        => 'id, parents',
+					'supportsAllDrives' => true,
 			 ]
 		 );
 	 }
@@ -123,6 +128,8 @@ function organiseFilesByProductCode(
 					   . " and mimeType != 'application/vnd.google-apps.folder'"
 					   . " and trashed=false",
 			 'fields' => 'nextPageToken, files(id, name, mimeType, webViewLink)',
+			'supportsAllDrives' => true,
+			'includeItemsFromAllDrives' => true,
 		 ];
  
 		 if ($pageToken) $params['pageToken'] = $pageToken;
@@ -168,6 +175,8 @@ function organiseFilesByProductCode(
 					   . " and '{$searchFolderId}' in parents"
 					   . " and trashed=false",
 			 'fields' => 'nextPageToken, files(id, name)',
+			'supportsAllDrives' => true,
+			'includeItemsFromAllDrives' => true,
 		 ];
  
 		 if ($pageToken) $params['pageToken'] = $pageToken;
@@ -185,6 +194,8 @@ function organiseFilesByProductCode(
 			 $params = [
 				 'q'      => "'{$folder->getId()}' in parents and trashed=false",
 				 'fields' => 'nextPageToken, files(id)',
+			'supportsAllDrives' => true,
+			'includeItemsFromAllDrives' => true,
 			 ];
 	 
 			 if ($pageToken) $params['pageToken'] = $pageToken;
@@ -199,6 +210,7 @@ function organiseFilesByProductCode(
 						 'addParents'    => $destFolder,
 						 'removeParents' => $folder->getId(),
 						 'fields'        => 'id, parents',
+					'supportsAllDrives' => true,
 					 ]
 				 );
 			 }
@@ -209,7 +221,7 @@ function organiseFilesByProductCode(
 	 
 	 // Optionally delete the now-empty source folders
 	 foreach ($matchingFolders as $folder) {
-		 $drive->files->delete($folder->getId());
+		 $drive->files->delete($folder->getId(), ['supportsAllDrives' => true]);
 	 }
  
 	 // 4. List what's already in the destination folder (covers reloads)
@@ -222,6 +234,8 @@ function organiseFilesByProductCode(
 					   . " and '{$destFolder}' in parents"
 					   . " and trashed=false",
 			 'fields' => 'nextPageToken, files(id, name)',
+			'supportsAllDrives' => true,
+			'includeItemsFromAllDrives' => true,
 		 ];
  
 		 if ($pageToken) $params['pageToken'] = $pageToken;
@@ -258,6 +272,8 @@ function organiseFilesByProductCode(
 						. " and mimeType != 'application/vnd.google-apps.folder'"
 						. " and trashed=false",
 			  'fields' => 'nextPageToken, files(id, name, mimeType, webViewLink)',
+			'supportsAllDrives' => true,
+			'includeItemsFromAllDrives' => true,
 		  ];
   
 		  if ($pageToken) $params['pageToken'] = $pageToken;
@@ -287,6 +303,8 @@ function organiseFilesByProductCode(
 						. " and mimeType = 'application/vnd.google-apps.folder'"
 						. " and trashed=false",
 			  'fields' => 'nextPageToken, files(id, name)',
+			'supportsAllDrives' => true,
+			'includeItemsFromAllDrives' => true,
 		  ];
   
 		  if ($pageToken) $params['pageToken'] = $pageToken;
