@@ -47,6 +47,7 @@ function findFolder(Google\Service\Drive $drive, string $name, string $parentId)
 		'q'      => "mimeType='application/vnd.google-apps.folder'"
 				  . " and name='{$escaped}' and '{$parentId}' in parents and trashed=false",
 		'fields' => 'files(id)',
+		'orderBy' => 'createdTime',
 		'supportsAllDrives' => true,
 		'includeItemsFromAllDrives' => true,
 	]);

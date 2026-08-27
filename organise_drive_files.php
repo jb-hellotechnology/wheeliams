@@ -33,7 +33,21 @@ $client->fetchAccessTokenWithRefreshToken(REFRESH_TOKEN);
 $drive = new Google\Service\Drive($client);
 
 /**
+ * True when $code appears in $name as a whole part-code token — i.e. not butted
+ * up against another letter or digit. The Drive "name contains" query is only a
+ * loose substring test, so without this "A06-0183-C" would also match
+ * "A06-0183-CX" (and longer codes could sweep up shorter ones). Boundaries are
+ * alphanumeric, so surrounding spaces, dashes, dots and extensions are fine.
+ */
+function nameHasProductCode(string $name, string $code): bool {
+	if ($code === '') return false;
+	return (bool) preg_match('/(?<![A-Za-z0-9])' . preg_quote($code, '/') . '(?![A-Za-z0-9])/', $name);
+}
+
+/**
  * Find a folder by name within a parent, or create it if it doesn't exist.
+ * Orders by createdTime so that if same-name duplicate folders ever exist, the
+ * SAME (oldest) one is always chosen — no random reads of an empty duplicate.
  */
 function findOrCreateFolder(Google\Service\Drive $drive, string $name, string $parentId): string {
 	$escaped = str_replace("'", "\\'", $name);
@@ -44,6 +58,7 @@ function findOrCreateFolder(Google\Service\Drive $drive, string $name, string $p
 				  . " and '{$parentId}' in parents"
 				  . " and trashed=false",
 		'fields' => 'files(id)',
+			'orderBy' => 'createdTime',
 			'supportsAllDrives' => true,
 			'includeItemsFromAllDrives' => true,
 	]);
@@ -98,6 +113,10 @@ function organiseFilesByProductCode(
  
 	 } while ($pageToken);
  
+	 // Keep only files where the code is a whole token, not a substring of a
+	 // longer code (Drive's "name contains" is a loose match).
+	 $allFiles = array_values(array_filter($allFiles, fn($f) => nameHasProductCode($f->getName(), $productCode)));
+
 	 // 2. Find or create the productCode subfolder inside the TYPE folder
 	 $productFolder = findOrCreateFolder($drive, $productCode, $destFolderId);
  
@@ -186,6 +205,11 @@ function organiseFilesByProductCode(
 		 $pageToken       = $results->getNextPageToken();
 	 } while ($pageToken);
  
+	 // Keep only folders where the code is a whole token — critical here because
+	 // the loop below MOVES each matched folder's contents then trashes it, so a
+	 // wrong (substring) match would be destructive.
+	 $matchingFolders = array_values(array_filter($matchingFolders, fn($f) => nameHasProductCode($f->getName(), $productCode)));
+
 	 // 3. Move contents of each matching folder into the destination
 	 foreach ($matchingFolders as $folder) {
 		 $pageToken = null;
@@ -219,9 +243,10 @@ function organiseFilesByProductCode(
 		 } while ($pageToken);
 	 }
 	 
-	 // Optionally delete the now-empty source folders
+	 // Trash (don't hard-delete) the now-empty source folders — reversible, in
+	 // case a folder was ever matched or emptied in error.
 	 foreach ($matchingFolders as $folder) {
-		 $drive->files->delete($folder->getId(), ['supportsAllDrives' => true]);
+		 $drive->files->update($folder->getId(), new Google\Service\Drive\DriveFile(['trashed' => true]), ['supportsAllDrives' => true]);
 	 }
  
 	 // 4. List what's already in the destination folder (covers reloads)

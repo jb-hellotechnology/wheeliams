@@ -49,6 +49,7 @@ function findOrCreateFolder(Google\Service\Drive $drive, string $name, string $p
 				  . " and '{$parentId}' in parents"
 				  . " and trashed=false",
 		'fields' => 'files(id)',
+		'orderBy' => 'createdTime',
 			'supportsAllDrives' => true,
 			'includeItemsFromAllDrives' => true,
 	]);

@@ -58,13 +58,10 @@ perch_layout('header');
 				echo '<div id="product-files">
 				  <div id="product-files-list"></div>
 				</div>';
-				if($_GET['type']=='manufactured'){
-					echo '<script>loadProductFiles("'.$componentData['partCode'].'", "COMPONENT");</script>';	
-				}elseif($_GET['type']=='fasteners'){
-					echo '<script>loadProductFiles("'.$componentData['partCode'].'", "FASTENER");</script>';
-				}else{
-					echo '<script>loadProductFiles("'.$componentData['partCode'].'", "RAW MATERIALS");</script>';
-				}
+				// Resolve the Drive folder type from the part code (A06→KIT, A02→COMPONENT)
+				// rather than the page's tab, so A06 kits look in /KIT, not /COMPONENT.
+				$driveType = wheeliams_drive_type_for($componentData['partCode'], $_GET['type']);
+				echo '<script>loadProductFiles("'.$componentData['partCode'].'", "'.$driveType.'");</script>';
 				echo '</article>';
 				echo '</section>';
 				wheeliams_form('component_file_add-'.$_GET['type'].'.html');

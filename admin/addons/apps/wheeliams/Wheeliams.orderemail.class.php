@@ -143,6 +143,7 @@ class Wheeliams_Order_Email
         $res = $drive->files->listFiles(array(
             'q'      => "mimeType='application/vnd.google-apps.folder' and name='{$escaped}' and '{$parentId}' in parents and trashed=false",
             'fields' => 'files(id)',
+            'orderBy' => 'createdTime',
 			'supportsAllDrives' => true,
 			'includeItemsFromAllDrives' => true,
         ));
