@@ -88,7 +88,7 @@
 						const icon = getFileIcon(file.mimeType);
 						li.innerHTML = `
 							<span class="file-icon">${icon}</span>
-							<a href="${file.webViewLink}" target="_blank" rel="noopener noreferrer">
+							<a href="/drive_download.php?id=${encodeURIComponent(file.id)}" download="${escapeHtml(file.name)}">
 								${escapeHtml(file.name)}
 							</a>
 						`;
