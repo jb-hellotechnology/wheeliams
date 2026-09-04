@@ -71,12 +71,24 @@ class Wheeliams_Components extends PerchAPI_Factory
 		
 	}
 	
-	public function componentPrice($componentID,$supplierID,$price){
-		
-		$sql = 'INSERT INTO perch3_wheeliams_components_suppliers_price (supplierID, componentID, price) VALUES ('.$supplierID.', '.$componentID.', '.$price.')';
-		$data = $this->db->execute($sql);
-		return $data;
-		
+	public function componentPrice($componentID,$supplierID,$price,$costDate=null){
+
+		$this->ensurePriceColumns();
+		// Cost date defaults to today but can be back-dated by the user.
+		$costDate = ($costDate && strtotime($costDate)) ? date('Y-m-d', strtotime($costDate)) : date('Y-m-d');
+
+		$sql = 'INSERT INTO perch3_wheeliams_components_suppliers_price (supplierID, componentID, price, cost_date) VALUES ('
+			.$this->db->pdb((int)$supplierID).', '.$this->db->pdb((int)$componentID).', '.$this->db->pdb($price).', '.$this->db->pdb($costDate).')';
+		return $this->db->execute($sql);
+
+	}
+
+	/* Add columns introduced after the price table first shipped. */
+	protected function ensurePriceColumns(){
+		$exists = $this->db->get_row("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='perch3_wheeliams_components_suppliers_price' AND COLUMN_NAME='cost_date'");
+		if(!$exists){
+			$this->db->execute("ALTER TABLE perch3_wheeliams_components_suppliers_price ADD COLUMN cost_date DATE DEFAULT NULL");
+		}
 	}
 	
 	public function getComponentPrice($componentID,$supplierID){
@@ -101,13 +113,14 @@ class Wheeliams_Components extends PerchAPI_Factory
 	
 	public function componentPriceGraph($componentID, $supplierID){
 		
-		$sql = 'SELECT * FROM perch3_wheeliams_components_suppliers_price WHERE componentID='.$componentID.' AND supplierID='.$supplierID.' ORDER BY timestamp DESC LIMIT 10';
+		$sql = 'SELECT * FROM perch3_wheeliams_components_suppliers_price WHERE componentID='.$componentID.' AND supplierID='.$supplierID.' ORDER BY COALESCE(cost_date, DATE(timestamp)) DESC LIMIT 10';
 		$data = $this->db->get_rows($sql);
 		$dataset = '';
 		foreach($data as $row){
-			$timestamp = explode(" ", $row['timestamp']);
-			$dataset .= '{ timestamp: \''.$timestamp[0].'\', price: '.number_format($row['price'], 2, '.', '').' },';
-		}		
+			// Plot against the cost date where set, else fall back to the entry timestamp.
+			$date = !empty($row['cost_date']) ? $row['cost_date'] : explode(" ", $row['timestamp'])[0];
+			$dataset .= '{ timestamp: \''.$date.'\', price: '.number_format($row['price'], 2, '.', '').' },';
+		}
 		return $dataset;
 		
 	}

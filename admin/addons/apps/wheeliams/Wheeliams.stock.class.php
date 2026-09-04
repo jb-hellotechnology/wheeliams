@@ -44,6 +44,39 @@ class Wheeliams_Stock extends PerchAPI_Factory
             KEY componentID (componentID),
             KEY reason (reason)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Columns added after the stock table first shipped.
+        foreach(array(
+            'stock_location_1' => 'VARCHAR(191) DEFAULT NULL',
+            'stock_location_2' => 'VARCHAR(191) DEFAULT NULL',
+            'stock_location_3' => 'VARCHAR(191) DEFAULT NULL',
+        ) as $col => $def){
+            $exists = $this->db->get_row("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='".$this->stock_table."' AND COLUMN_NAME='".$col."'");
+            if(!$exists){
+                $this->db->execute("ALTER TABLE ".$this->stock_table." ADD COLUMN ".$col." ".$def);
+            }
+        }
+    }
+
+    /* Save the three free-text stock-location fields (upsert; independent of level). */
+    public function setLocations($componentID, $loc1, $loc2, $loc3, $memberID)
+    {
+        $componentID = (int)$componentID;
+        $fields = array(
+            'stock_location_1' => (string)$loc1,
+            'stock_location_2' => (string)$loc2,
+            'stock_location_3' => (string)$loc3,
+            'updated_at'       => date('Y-m-d H:i:s'),
+            'updated_by'       => (int)$memberID,
+        );
+        if ($this->record($componentID)) {
+            $this->db->update($this->stock_table, $fields, 'componentID', $componentID);
+        } else {
+            $fields['componentID']   = $componentID;
+            $fields['current_level'] = 0;
+            $fields['planned_level'] = 0;
+            $this->db->insert($this->stock_table, $fields);
+        }
     }
 
     /* Full stock row for a component, or null if none yet. */

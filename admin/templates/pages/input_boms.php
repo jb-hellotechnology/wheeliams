@@ -47,10 +47,13 @@ perch_layout('header');
 		/* LIST ITEMS OF TYPE WITH EDIT/DELETE OPTIONS */
 		if($_GET['edit']){
 			/* FILES */
-			wheeliams_form('bom_raw-materials.html');
+			// Order the ASSIGN areas by likely use: Components, then Fasteners, then Raw Materials.
 			if($_GET['type']=='products'){
-				wheeliams_form('bom_fasteners.html');
 				wheeliams_form('bom_components.html');
+				wheeliams_form('bom_fasteners.html');
+				wheeliams_form('bom_raw-materials.html');
+			}else{
+				wheeliams_form('bom_raw-materials.html');
 			}
 			echo '</div>';
 			echo '<div>';

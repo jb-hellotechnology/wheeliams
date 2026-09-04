@@ -80,7 +80,9 @@ if(!$runID){ $runID = $Analysis->latestRunID(); }
 		foreach($runs as $r){
 			$rid = (int)$r['perch3_wheeliams_analysis_runID'];
 			$sel = ($rid === $runID) ? ' selected' : '';
-			echo '<option value="'.$rid.'"'.$sel.'>#'.$rid.' — '.htmlspecialchars($r['created_at']).'</option>';
+			$ts = strtotime($r['created_at']);
+			$label = $ts ? date('l d-m-Y \a\t H:i', $ts) : $r['created_at']; // e.g. Monday 31-08-2026 at 14:54
+			echo '<option value="'.$rid.'"'.$sel.'>'.htmlspecialchars($label).'</option>';
 		}
 		echo '</select></article><footer><input type="submit" value="Select" class="button primary" /></footer></form></section>';
 	}

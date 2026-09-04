@@ -11,11 +11,17 @@
 	<script src="/assets/redactor/redactor.min.js"></script>
 	<script>
 	$(document).ready( function () {
-		$('.datatable').DataTable({
-			aLengthMenu: [
-				[10, 25, 50, 100, 200, -1],
-				[10, 25, 50, 100, 200, "All"]
-			]
+		$('.datatable').each(function(){
+			var opts = {
+				aLengthMenu: [
+					[10, 25, 50, 100, 200, -1],
+					[10, 25, 50, 100, 200, "All"]
+				]
+			};
+			// Optional per-table default sort, e.g. data-order='[[1,"asc"]]'
+			var ord = $(this).attr('data-order');
+			if(ord){ try { opts.order = JSON.parse(ord); } catch(e){} }
+			$(this).DataTable(opts);
 		});
 	} );
 	$R('.redactor');

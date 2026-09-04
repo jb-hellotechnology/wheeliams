@@ -245,6 +245,10 @@
 				$data['maximum_stock_level'] = $dyn['maximum_stock_level'] ?? '';
 				$data['reorder_quantity']    = $dyn['reorder_quantity'] ?? '';
 				$data['current_level']       = wheeliams_num($Stock->level($componentID));
+				$rec = $Stock->record($componentID);
+				$data['stock_location_1']    = $rec['stock_location_1'] ?? '';
+				$data['stock_location_2']    = $rec['stock_location_2'] ?? '';
+				$data['stock_location_3']    = $rec['stock_location_3'] ?? '';
 				$data['adjust']              = '0';
 			}
 		}
@@ -426,10 +430,23 @@
 				
 					if ($id) {
 						$component = $WheeliamsComponents->find($id);
-						
+
 						// Capture old values before update
 						$oldValues = $component->dynamicFields();
-						
+
+						// A manufactured part's NUMBER is its identity and must never be
+						// re-derived from the DB row id on edit — that rewrote imported codes
+						// like A06-0419-C to A06-<rowid>-C. Keep the existing number; still let
+						// prefix / component-type / issue-code edits flow through.
+						if ($type == 'manufactured') {
+							$existing = $WheeliamsComponents->component($id);
+							if ($existing && preg_match('/-(\d+)-/', $existing['partCode'], $m)) {
+								$record['partCode'] = strtoupper($data['part_no_prefix'].$data['component_type'].'-'.$m[1].'-'.$data['part_issue_code']);
+							} else {
+								unset($record['partCode']); // can't parse a number — leave the stored code untouched
+							}
+						}
+
 						$component->update($record);
 						
 						// Log the change
@@ -575,7 +592,7 @@
 				
 				case 'component_supplier_price':
 					$WheeliamsComponents = new Wheeliams_Components($API);
-					$WheeliamsComponents->componentPrice($_GET['id'],$SubmittedForm->data['wheeliams_supplierID'],$SubmittedForm->data['price']);
+					$WheeliamsComponents->componentPrice($_GET['id'],$SubmittedForm->data['wheeliams_supplierID'],$SubmittedForm->data['price'],$SubmittedForm->data['cost_date'] ?? null);
 				break;
 				
 				case 'component_supplier_remove':
@@ -625,6 +642,14 @@
 					$memberID = $Session->get('memberID');
 					if($componentID){
 						$note = $SubmittedForm->data['note'] ?? '';
+						// Stock location fields (free text), saved independently of the level.
+						$Stock->setLocations(
+							$componentID,
+							$SubmittedForm->data['stock_location_1'] ?? '',
+							$SubmittedForm->data['stock_location_2'] ?? '',
+							$SubmittedForm->data['stock_location_3'] ?? '',
+							$memberID
+						);
 						// 1. Absolute correction, if the current-level field was set.
 						if($SubmittedForm->data['current_level'] !== ''){
 							$Stock->setAbsolute($componentID, $SubmittedForm->data['current_level'], 'manual_set', $memberID, $note);
@@ -1185,7 +1210,9 @@
 			echo '<th>Part Code</th>';
 			
 			if($type=='manufactured'){
-				echo '<th>Description</th>';	
+				echo '<th>Description</th><th>Product Short Code</th><th>Part Status</th><th>Vehicle</th><th>UOM</th>';
+			}elseif($type=='raw-materials'){
+				echo '<th>Mass/Unit Length (Kg)</th><th>UOM</th><th>Max Stock</th><th>Reorder Qty</th><th>Rounding Qty</th>';
 			}
 			
 			echo '<th>Timestamp</th>';
@@ -1203,7 +1230,19 @@
 				echo '<td><a href="'.$_SERVER['REQUEST_URI'].'&edit=1&id='.$setting['perch3_wheeliams_componentID'].'">'.$fourDigitNumber.'</a></td>';
 				echo '<td><a href="'.$_SERVER['REQUEST_URI'].'&edit=1&id='.$setting['perch3_wheeliams_componentID'].'">'.$setting['partCode'].'</a></td>';
 				if($type=='manufactured'){
-					echo '<td>'.$dynamic['part_description'].'</td>';	
+					$vehicle = $dynamic['vehicle'] ?? '';
+					if(is_array($vehicle)) $vehicle = implode(', ', $vehicle);
+					echo '<td>'.htmlspecialchars($dynamic['part_description'] ?? '').'</td>';
+					echo '<td>'.htmlspecialchars($dynamic['product_short_code'] ?? '').'</td>';
+					echo '<td>'.htmlspecialchars($dynamic['part_status_code'] ?? '').'</td>';
+					echo '<td>'.htmlspecialchars($vehicle).'</td>';
+					echo '<td>'.htmlspecialchars($dynamic['unit_of_measure'] ?? '').'</td>';
+				}elseif($type=='raw-materials'){
+					echo '<td>'.htmlspecialchars($dynamic['mass_per_unit_length'] ?? '').'</td>';
+					echo '<td>'.htmlspecialchars($dynamic['unit_of_measure'] ?? '').'</td>';
+					echo '<td>'.htmlspecialchars($dynamic['maximum_stock_level'] ?? '').'</td>';
+					echo '<td>'.htmlspecialchars($dynamic['reorder_quantity'] ?? '').'</td>';
+					echo '<td>'.htmlspecialchars($dynamic['batch_rounding_quantity'] ?? '').'</td>';
 				}
 				echo '<td>'.$setting['timestamp'].'</td>';
 				echo '<td><a href="'.$_SERVER['REQUEST_URI'].'&delete=1&id='.$setting['perch3_wheeliams_componentID'].'" class="warning">Delete</a></td>';
@@ -1386,6 +1425,7 @@
 			PerchSystem::set_var('wheeliams_supplierID', $supplier['wheeliams_supplierID']);
 			PerchSystem::set_var('latestPrice', $latestPrice['price']);
 			PerchSystem::set_var('price', $Components->getComponentPrice($id,$supplier['wheeliams_supplierID']));
+			PerchSystem::set_var('cost_date', date('Y-m-d')); // default the cost date to today
 			wheeliams_form('component_supplier_price.html');
 			echo '<footer>';
 			wheeliams_form('component_supplier_current.html');
@@ -1430,10 +1470,13 @@
 			$show_fields = array('part_description');
 		
 			echo '<div class="table-container compact">';
-			echo '<table class="datatable">';
+			echo '<table class="datatable" data-order=\'[[1,"asc"]]\'>';
 			echo '<thead class="first-row">';
+			echo '<th>Product Short Code</th>';
 			echo '<th>Part Code</th>';
-			echo '<th>Description</th>';	
+			echo '<th>Description</th>';
+			echo '<th>Part Status</th>';
+			echo '<th>Vehicle</th>';
 			echo '<th>Timestamp</th>';
 			echo '</thead>';
 			echo '<tbody>';
@@ -1441,9 +1484,14 @@
 			foreach($existing as $setting){
 				$dynamic = json_decode($setting['dynamicFields'],true);
 				echo '<tr>';
-				echo '<td><a href="'.$_SERVER['REQUEST_URI'].'&edit=1&id='.$setting['perch3_wheeliams_componentID'].'">'.$setting['partCode'].'</a></td>';
-				echo '<td>'.$dynamic['part_description'].'</td>';
-				echo '<td>'.$setting['timestamp'].'</td>';
+				$vehicle = $dynamic['vehicle'] ?? '';
+				if(is_array($vehicle)) $vehicle = implode(', ', $vehicle);
+				echo '<td>'.htmlspecialchars($dynamic['product_short_code'] ?? '').'</td>';
+				echo '<td><a href="'.$_SERVER['REQUEST_URI'].'&edit=1&id='.$setting['perch3_wheeliams_componentID'].'">'.htmlspecialchars($setting['partCode']).'</a></td>';
+				echo '<td>'.htmlspecialchars($dynamic['part_description'] ?? '').'</td>';
+				echo '<td>'.htmlspecialchars($dynamic['part_status_code'] ?? '').'</td>';
+				echo '<td>'.htmlspecialchars($vehicle).'</td>';
+				echo '<td>'.htmlspecialchars($setting['timestamp']).'</td>';
 				echo '</tr>';
 			}
 			echo '</tbody>';
@@ -1715,8 +1763,11 @@
 			if(empty($r['partCode'])) continue;
 			$dyn = json_decode($r['dynamicFields'], true) ?: array();
 			$id  = (int)$r['componentID'];
+			$cedit = ($r['type'] === 'products')
+				? '/boms/?type=products&edit=1&id='.$id
+				: '/components/?type='.htmlspecialchars((string)$r['type']).'&edit=1&id='.$id;
 			echo '<tr>';
-			echo '<td>'.htmlspecialchars($r['partCode']).'</td>';
+			echo '<td><a href="'.$cedit.'">'.htmlspecialchars($r['partCode']).'</a></td>';
 			echo '<td>'.htmlspecialchars($dyn['part_description'] ?? '').'</td>';
 			echo '<td>'.wheeliams_num($r['current_level']).'</td>';
 			echo '<td>'.htmlspecialchars($dyn['unit_of_measure'] ?? '').'</td>';
@@ -1842,7 +1893,6 @@
 		echo '<div class="table-container compact"><table class="datatable bom-explosion">';
 		echo '<thead class="first-row">';
 		echo '<th>Part Code</th><th>Description</th><th>Qty</th><th>UOM</th><th>Material</th>';
-		if($editable){ echo '<th>Process</th>'; }
 		if($canCost){ echo '<th>Supplier</th><th>Unit Cost</th><th>Line Cost</th>'; }
 		if($showFiles){ echo '<th class="no-print">Drawings</th>'; }
 		if($editable){ echo '<th>Edit</th><th>Delete</th>'; }
@@ -1856,7 +1906,7 @@
 		echo '</tbody>';
 		if($canCost){
 			$rollup = wheeliams_bom_rollup($tree);
-			echo '<tfoot><tr><th colspan="8" style="text-align:right">Rolled-up material cost</th><th>£'.number_format($rollup, 2).'</th>';
+			echo '<tfoot><tr><th colspan="7" style="text-align:right">Rolled-up material cost</th><th>£'.number_format($rollup, 2).'</th>';
 			if($showFiles){ echo '<td class="no-print"></td>'; }
 			if($editable){ echo '<td></td><td></td>'; }
 			echo '</tr></tfoot>';
@@ -1879,7 +1929,6 @@
 		echo '<td>'.wheeliams_num($node['extended_qty']).'</td>';
 		echo '<td>'.htmlspecialchars($node['uom']).'</td>';
 		echo '<td>'.htmlspecialchars($node['generic_material']).'</td>';
-		if($editable){ echo '<td>'.htmlspecialchars($node['process_type']).'</td>'; }
 		if($canCost){
 			// Supplier name, hyperlinked to their site when we have one (the "buy" link).
 			$sup = htmlspecialchars($node['supplierName']);
@@ -2031,7 +2080,8 @@ GRAPHQL;
 		foreach($lines as $line){
 			echo '<tr>';
 			echo '<td>'.htmlspecialchars($line['supplierName'] ?: '—').'</td>';
-			echo '<td>'.htmlspecialchars($line['partCode']).'</td>';
+			$clink = '/components/?type='.htmlspecialchars((string)$line['type']).'&edit=1&id='.(int)$line['componentID'];
+			echo '<td><a href="'.$clink.'">'.htmlspecialchars($line['partCode']).'</a></td>';
 			echo '<td>'.htmlspecialchars($line['description']).'</td>';
 			echo '<td>'.htmlspecialchars($line['used_on']).'</td>';
 			echo '<td>'.htmlspecialchars($line['type']).'</td>';

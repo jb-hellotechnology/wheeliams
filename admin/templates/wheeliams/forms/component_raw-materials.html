@@ -28,12 +28,12 @@
 		
 		<div>
 			<perch:label for="mass_per_unit_length">Mass Per Unit Length (KG)</perch:label>
-			<perch:input type="number" id="mass_per_unit_length" />
+			<perch:input type="number" id="mass_per_unit_length" step="0.00001" min="0" />
 		</div>
 		
 		<div>
 			<perch:label for="unit_of_measure">Unit of Measure</perch:label>
-			<perch:input type="select" id="unit_of_measure" options="<perch:forms id="values-unit_of_measure">" />
+			<perch:input type="select" id="unit_of_measure" options="<perch:forms id="values-unit_of_measure">" value="Length" />
 		</div>
 
 		<div>

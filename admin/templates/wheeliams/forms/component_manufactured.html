@@ -18,7 +18,7 @@
 		
 		<div>
 			<perch:label for="part_issue_code">Part Issue Code</perch:label>
-			<perch:input type="select" id="part_issue_code" options="<perch:forms id="values-part_issue_code">" />
+			<perch:input type="select" id="part_issue_code" options="<perch:forms id="values-part_issue_code">" value="A" />
 		</div>
 		
 		<div>
@@ -75,7 +75,12 @@
 			<perch:label for="unit_of_measure">Unit of Measure</perch:label>
 			<perch:input type="select" id="unit_of_measure" options="<perch:forms id="values-unit_of_measure">" value="EA" />
 		</div>
-		
+
+		<div>
+			<perch:label for="component_mass">Component Mass (Kg)</perch:label>
+			<perch:input type="number" id="component_mass" step="0.00001" min="0" />
+		</div>
+
 		<div>
 			<perch:label for="maximum_stock_level">Maximum Stock Level</perch:label>
 			<perch:input type="number" id="maximum_stock_level" min="0" max="10000" />

@@ -63,21 +63,32 @@ class Wheeliams_Boms extends PerchAPI_Factory
 	}
 	
 	public function saveNotes($data){
-		
+
+		$this->ensureNotesColumns();
+
 		$bomID = $data['bomID'];
-		$type = $data['type'];
-		$notes = $data['notes'];
-		
-		$sql = 'SELECT * FROM perch3_wheeliams_boms_notes WHERE bomID="'.$bomID.'" AND bomType="'.$type.'"';
+		$type  = $data['type'];
+		$notes = $data['notes'] ?? '';
+		$cad   = $data['cad_layout_number'] ?? '';
+
+		$sql = 'SELECT * FROM perch3_wheeliams_boms_notes WHERE bomID='.$this->db->pdb($bomID).' AND bomType='.$this->db->pdb($type);
 		$row = $this->db->get_row($sql);
 		if($row){
-			$sql = 'UPDATE perch3_wheeliams_boms_notes SET notes="'.$notes.'" WHERE bomType="'.$type.'" AND bomID="'.$bomID.'"';
-			$data = $this->db->execute($sql);
+			$sql = 'UPDATE perch3_wheeliams_boms_notes SET notes='.$this->db->pdb($notes).', cad_layout_number='.$this->db->pdb($cad).' WHERE bomType='.$this->db->pdb($type).' AND bomID='.$this->db->pdb($bomID);
+			$this->db->execute($sql);
 		}else{
-			$sql = 'INSERT INTO perch3_wheeliams_boms_notes (bomType, bomID, notes) VALUES ("'.$type.'", "'.$bomID.'", "'.$notes.'")';
-			$data = $this->db->execute($sql);
+			$sql = 'INSERT INTO perch3_wheeliams_boms_notes (bomType, bomID, notes, cad_layout_number) VALUES ('.$this->db->pdb($type).', '.$this->db->pdb($bomID).', '.$this->db->pdb($notes).', '.$this->db->pdb($cad).')';
+			$this->db->execute($sql);
 		}
-		
+
+	}
+
+	/* Add columns introduced after the notes table was first created. */
+	protected function ensureNotesColumns(){
+		$exists = $this->db->get_row("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='perch3_wheeliams_boms_notes' AND COLUMN_NAME='cad_layout_number'");
+		if(!$exists){
+			$this->db->execute("ALTER TABLE perch3_wheeliams_boms_notes ADD COLUMN cad_layout_number VARCHAR(191) DEFAULT NULL");
+		}
 	}
 	
 	public function notes($type, $id){
