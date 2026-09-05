@@ -701,14 +701,32 @@ class PerchTemplatedForm
         // Strip [] suffix before looking up in content_vars
         $incoming_attr = rtrim($incoming_attr, '[]');
     
-        if (isset($this->content_vars[$incoming_attr])) $new_value = $this->content_vars[$incoming_attr];
-    
-        if ($Tag->env_autofill(true)) {
-            if (isset($_POST[$incoming_attr]))  $new_value = (stripslashes($_POST[$incoming_attr]));
-            if (isset($_GET[$incoming_attr]))   $new_value = (stripslashes($_GET[$incoming_attr]));
+        $has_content_var = isset($this->content_vars[$incoming_attr]);
+        if ($has_content_var) $new_value = $this->content_vars[$incoming_attr];
+
+        // Hidden fields are app-controlled (set via set_var). Don't let a stale $_POST
+        // value override an explicitly-set hidden value — otherwise repeated forms on one
+        // page (e.g. per-row supplier remove/set-current forms) all inherit the last
+        // submitted id, so the next action targets the wrong row.
+        $is_app_set_hidden = ($has_content_var && $Tag->type() === 'hidden');
+
+        if ($Tag->env_autofill(true) && !$is_app_set_hidden) {
+            if (isset($_POST[$incoming_attr]))  $new_value = $this->_stripslashes_deep($_POST[$incoming_attr]);
+            if (isset($_GET[$incoming_attr]))   $new_value = $this->_stripslashes_deep($_GET[$incoming_attr]);
         }
-    
+
         return $new_value;
+    }
+
+    /* PHP 8-safe stripslashes that recurses into arrays (e.g. multi-select values).
+       On PHP 8, stripslashes(array) throws a TypeError; the select renderer already
+       handles array values (see is_array($value) in _replace_select_field). */
+    private function _stripslashes_deep($value)
+    {
+        if (is_array($value)) {
+            return array_map(array($this, '_stripslashes_deep'), $value);
+        }
+        return is_string($value) ? stripslashes($value) : $value;
     }
 
 	private function _submitted()

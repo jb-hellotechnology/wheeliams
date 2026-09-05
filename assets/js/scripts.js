@@ -123,31 +123,55 @@ addFormConfirmation(".confirm", "Are you sure?");
 
 
 (function () {
-  const form = document.querySelector('form'); // or getElementById('myForm')
-  let isDirty = false;
+  // Warn about unsaved changes — but ONLY when the values actually differ from
+  // how the form loaded. We snapshot each form after everything has settled
+  // (Perch pre-fill, Select2, autofill) and compare values on the way out, so
+  // programmatic/auto-population events never count as "the user made changes".
+  const forms = Array.from(document.querySelectorAll('form'));
+  if (!forms.length) return;
 
-  // Mark dirty on any change
-  form.addEventListener('input', () => { isDirty = true; });
-  form.addEventListener('change', () => { isDirty = true; });
+  let submitting = false;
+  const snapshots = new WeakMap();
 
-  // Clear flag when the form is actually submitted/saved
-  form.addEventListener('submit', () => { isDirty = false; });
-
-  // Browser back button, tab close, refresh, address bar navigation
-  window.addEventListener('beforeunload', (e) => {
-	if (isDirty) {
-	  e.preventDefault();
-	  e.returnValue = ''; // required by some browsers
-	}
-  });
-
-  // Links on the page
-  document.addEventListener('click', (e) => {
-	const link = e.target.closest('a[href]');
-	if (link && isDirty) {
-	  if (!confirm('You have unsaved changes. Leave without saving?')) {
-		e.preventDefault();
+  function serialize(form) {
+	const parts = [];
+	Array.from(form.elements).forEach((el) => {
+	  if (!el.name || el.disabled) return;
+	  const t = (el.type || '').toLowerCase();
+	  // Ignore buttons, files, and hidden system fields (component IDs, type, etc.)
+	  if (t === 'submit' || t === 'button' || t === 'reset' || t === 'file' || t === 'hidden') return;
+	  if (t === 'checkbox' || t === 'radio') {
+		parts.push(el.name + '=' + (el.checked ? '1' : '0'));
+	  } else if (el.multiple) {
+		parts.push(el.name + '=' + Array.from(el.selectedOptions).map((o) => o.value).join(','));
+	  } else {
+		parts.push(el.name + '=' + el.value);
 	  }
+	});
+	return parts.join('&');
+  }
+
+  function snapshotAll() {
+	forms.forEach((f) => snapshots.set(f, serialize(f)));
+  }
+
+  function anyDirty() {
+	if (submitting) return false;
+	return forms.some((f) => serialize(f) !== snapshots.get(f));
+  }
+
+  // Take the baseline once the page (and its widgets/autofill) has settled.
+  snapshotAll(); // best-effort immediately
+  window.addEventListener('load', () => setTimeout(snapshotAll, 300));
+
+  // A real submit is an intentional save — never warn on that navigation.
+  forms.forEach((f) => f.addEventListener('submit', () => { submitting = true; }));
+
+  // Covers tab close, refresh, back button, in-app links and address-bar nav.
+  window.addEventListener('beforeunload', (e) => {
+	if (anyDirty()) {
+	  e.preventDefault();
+	  e.returnValue = '';
 	}
   });
 })();

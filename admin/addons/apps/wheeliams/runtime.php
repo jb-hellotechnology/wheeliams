@@ -160,8 +160,14 @@
 		}
 		if($template == 'component_supplier_add.html'){
 			$data = $WheeliamsSuppliers->existing();
+			// Don't offer suppliers already assigned to this component.
+			$assigned = array();
+			foreach($WheeliamsComponents->componentSuppliers($_GET['id']) as $cs){
+				$assigned[(int)$cs['wheeliams_supplierID']] = true;
+			}
 			$suppliers = "Please Select";
 			foreach($data AS $supplier){
+				if(isset($assigned[(int)$supplier['wheeliams_supplierID']])) continue;
 				$suppliers .= ",".$supplier['name']."|".$supplier['wheeliams_supplierID'];
 			}
 			$data['suppliers'] = $suppliers;
@@ -1215,7 +1221,6 @@
 				echo '<th>Mass/Unit Length (Kg)</th><th>UOM</th><th>Max Stock</th><th>Reorder Qty</th><th>Rounding Qty</th>';
 			}
 			
-			echo '<th>Timestamp</th>';
 			echo '<th>Delete</th>';
 			echo '</thead>';
 			echo '<tbody>';
@@ -1244,7 +1249,6 @@
 					echo '<td>'.htmlspecialchars($dynamic['reorder_quantity'] ?? '').'</td>';
 					echo '<td>'.htmlspecialchars($dynamic['batch_rounding_quantity'] ?? '').'</td>';
 				}
-				echo '<td>'.$setting['timestamp'].'</td>';
 				echo '<td><a href="'.$_SERVER['REQUEST_URI'].'&delete=1&id='.$setting['perch3_wheeliams_componentID'].'" class="warning">Delete</a></td>';
 				echo '</tr>';
 			}

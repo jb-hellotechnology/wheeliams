@@ -47,10 +47,24 @@ class Wheeliams_Components extends PerchAPI_Factory
 	}
 	
 	public function assignSupplier($componentID, $supplierID){
-		
-		$sql = 'INSERT INTO perch3_wheeliams_components_suppliers (perch3_wheeliams_componentID, wheeliams_supplierID) VALUES ('.$componentID.', '.$supplierID.')';
-		$data = $this->db->execute($sql);
-		
+
+		$componentID = (int)$componentID;
+		$supplierID  = (int)$supplierID;
+
+		$rows = $this->db->get_rows('SELECT wheeliams_supplierID FROM perch3_wheeliams_components_suppliers WHERE perch3_wheeliams_componentID='.$componentID);
+
+		// Never assign the same supplier to a component twice.
+		foreach($rows as $r){
+			if((int)$r['wheeliams_supplierID'] === $supplierID) return false;
+		}
+
+		// The first supplier assigned becomes the CURRENT one by default.
+		$current = (count($rows) === 0) ? 1 : 0;
+
+		$sql = 'INSERT INTO perch3_wheeliams_components_suppliers (perch3_wheeliams_componentID, wheeliams_supplierID, current) VALUES ('.$componentID.', '.$supplierID.', '.$current.')';
+		$this->db->execute($sql);
+		return true;
+
 	}
 	
 	public function removeSupplier($componentID, $supplierID){
