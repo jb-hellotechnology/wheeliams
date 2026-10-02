@@ -49,6 +49,18 @@ class Wheeliams_Analysis extends PerchAPI_Factory
             KEY runID (runID),
             KEY componentID (componentID)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // Columns added later so the reorder maths is transparent on the list:
+        // demand_qty = qty needed to build the open orders; in_stock = stock at run time.
+        foreach(array(
+            'demand_qty' => 'DECIMAL(14,3) NOT NULL DEFAULT 0',
+            'in_stock'   => 'DECIMAL(14,3) NOT NULL DEFAULT 0',
+        ) as $col => $def){
+            $exists = $this->db->get_row("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='".$this->lines_table."' AND COLUMN_NAME='".$col."'");
+            if(!$exists){
+                $this->db->execute("ALTER TABLE ".$this->lines_table." ADD COLUMN ".$col." ".$def);
+            }
+        }
     }
 
     /* Run an analysis and save it. Returns the new run id.
@@ -119,6 +131,8 @@ class Wheeliams_Analysis extends PerchAPI_Factory
             $collated[$cid] = array(
                 'node'    => $info['node'],
                 'qt'      => $orderQty,
+                'demand'  => $cdemand,   // qty needed to build the open orders
+                'stock'   => $cstock,    // stock on hand at run time
                 'used_on' => $info['used_on'],
             );
         }
@@ -148,6 +162,8 @@ class Wheeliams_Analysis extends PerchAPI_Factory
                 'supplierID'   => (int)$node['supplierID'],
                 'supplierName' => $node['supplierName'],
                 'used_on'      => implode(', ', array_keys($c['used_on'])),
+                'demand_qty'   => $c['demand'],
+                'in_stock'     => $c['stock'],
                 'total_qty'    => $qt,
                 'actual_qty'   => $aq,
                 'created_at'   => date('Y-m-d H:i:s'),

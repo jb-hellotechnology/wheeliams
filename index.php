@@ -258,9 +258,9 @@ perch_layout('header');
 																	  <td>';
 																		  $bomLink = wheeliams_bom_link_for_sku($item['sku'] ?? '');
 																			  if($bomLink){
-																				  echo '<p><a href="'.$bomLink.'">'.$label.'</a></p>';
+																				  echo '<p><a href="'.$bomLink.'">'.$label.'</a>'.(!empty($item['sku']) ? ' <small class="sku">'.htmlspecialchars($item['sku']).'</small>' : '').'</p>';
 																			  }else{
-																				  echo '<p>'.$label.'</p>';
+																				  echo '<p>'.$label.(!empty($item['sku']) ? ' <small class="sku">'.htmlspecialchars($item['sku']).'</small>' : '').'</p>';
 																			  }
 																	  echo '</td>
 																	  <td>
@@ -318,6 +318,7 @@ perch_layout('header');
 										  }else{
 											  echo htmlspecialchars($label);
 										  }
+										  if(!empty($itemSkus[$label])) echo ' <small class="sku">'.htmlspecialchars($itemSkus[$label]).'</small>';
 									  ?></td>
 									  <td><?php echo $qty; ?></td>
 								  </tr>
@@ -343,7 +344,7 @@ perch_layout('header');
 						<tbody>
 							<?php if($hiddenRows){ foreach($hiddenRows as $hr): $hbom = wheeliams_bom_link_for_sku($hr['sku']); ?>
 							<tr>
-								<td><?php if($hbom){ echo '<a href="'.$hbom.'">'.$hr['label'].'</a>'; }else{ echo $hr['label']; } ?></td>
+								<td><?php if($hbom){ echo '<a href="'.$hbom.'">'.$hr['label'].'</a>'; }else{ echo $hr['label']; } if(!empty($hr['sku'])) echo ' <small class="sku">'.htmlspecialchars($hr['sku']).'</small>'; ?></td>
 								<td><?php echo $hr['qty']; ?></td>
 								<td><?php echo $hr['order']; ?></td>
 								<td><?php echo $hr['date']; ?></td>

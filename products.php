@@ -1,4 +1,7 @@
 <?php
+// Runs over HTTP or from cron/CLI. On CLI, DOCUMENT_ROOT isn't set, so fall back
+// to this file's own directory (the web root) for the includes below.
+if (empty($_SERVER['DOCUMENT_ROOT'])) { $_SERVER['DOCUMENT_ROOT'] = __DIR__; }
 include_once $_SERVER['DOCUMENT_ROOT'].'/secrets.php';
 include_once $_SERVER['DOCUMENT_ROOT'].'/shopify-graphql.php';
 ini_set('display_errors', 1);

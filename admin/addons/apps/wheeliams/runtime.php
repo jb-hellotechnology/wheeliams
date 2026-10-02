@@ -2079,7 +2079,7 @@ GRAPHQL;
 		echo '<input type="hidden" name="run" value="'.(int)$runID.'">';
 		echo '<div class="table-container"><table class="datatable">';
 		echo '<thead class="first-row">';
-		echo '<th>Supplier</th><th>Part Code</th><th>Description</th><th>Used On</th><th>Type</th><th>Process</th><th>Required</th><th>UOM</th><th>Order Qty (AQ)</th>';
+		echo '<th>Supplier</th><th>Part Code</th><th>Description</th><th>Used On</th><th>Type</th><th>Process</th><th title="Qty needed to build the open orders">Demand</th><th title="Stock on hand when the analysis ran">In Stock</th><th title="Suggested order to refill stock to the maximum level">Order Qty</th><th>UOM</th><th>Order Qty (AQ)</th>';
 		echo '</thead><tbody>';
 		foreach($lines as $line){
 			echo '<tr>';
@@ -2090,6 +2090,8 @@ GRAPHQL;
 			echo '<td>'.htmlspecialchars($line['used_on']).'</td>';
 			echo '<td>'.htmlspecialchars($line['type']).'</td>';
 			echo '<td>'.htmlspecialchars($line['process_type']).'</td>';
+			echo '<td>'.wheeliams_num($line['demand_qty'] ?? 0).'</td>';
+			echo '<td>'.wheeliams_num($line['in_stock'] ?? 0).'</td>';
 			echo '<td>'.wheeliams_num($line['total_qty']).'</td>';
 			echo '<td>'.htmlspecialchars($line['uom']).'</td>';
 			echo '<td><input type="text" name="aq['.(int)$line['perch3_wheeliams_reorder_lineID'].']" value="'.htmlspecialchars(wheeliams_num($line['actual_qty'])).'" size="8" inputmode="decimal"></td>';
