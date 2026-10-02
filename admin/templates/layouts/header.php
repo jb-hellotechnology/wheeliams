@@ -143,7 +143,7 @@
 				if(perch_member_logged_in()){
 			?>
 			<div class="main-nav-container">
-				<?php 
+				<?php
 				perch_pages_navigation();
   				?>
 			</div>

@@ -53,6 +53,8 @@ perch_layout('header');
 				wheeliams_form('bom_fasteners.html');
 				wheeliams_form('bom_raw-materials.html');
 			}else{
+				// Components can take fasteners as well as raw materials; both roll into cost.
+				wheeliams_form('bom_fasteners.html');
 				wheeliams_form('bom_raw-materials.html');
 			}
 			echo '</div>';

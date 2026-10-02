@@ -152,7 +152,8 @@
 		</div>
 		
 		<perch:success>
-			<p class="alert success">Success | <a href="/components/?type=<perch:forms id="type" />">Add another component</a> | <a href="/components/">Back to menu</a></p>
+			<p class="alert success">Component saved. Returning to the list&hellip; <a href="/components/?type=<perch:forms id="type" />">continue now</a></p>
+			<script>setTimeout(function(){ location.href = '/components/?type=<perch:forms id="type" />'; }, 600);</script>
 		</perch:success>
 	</article>
 	

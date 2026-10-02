@@ -23,6 +23,12 @@ if (!$type || !$partCode) {
 	json_error('Missing type or partCode.', 400);
 }
 
+// Native SolidWorks files are held separately, not published on the dashboard.
+$ext = strtolower(pathinfo($_FILES['file']['name'], PATHINFO_EXTENSION));
+if (in_array($ext, array('sldprt', 'sldasm', 'slddrw', 'slddrt', 'sldlfp'), true)) {
+	json_error('Native SolidWorks files (.'.$ext.') can’t be attached here — please upload a PDF, DXF, STEP, image or document instead.', 415);
+}
+
 // Authenticate via OAuth2
 $client = new Google\Client();
 $client->setClientId(CLIENT_ID);

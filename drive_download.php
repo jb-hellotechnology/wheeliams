@@ -54,8 +54,10 @@ if (strpos($mime, 'application/vnd.google-apps') === 0) {
 while (ob_get_level()) { ob_end_clean(); }
 
 $asciiName = str_replace('"', '', preg_replace('/[^\x20-\x7E]/', '_', $name));
+// ?inline=1 lets the browser display the file (e.g. view a PDF) instead of forcing a download.
+$disposition = !empty($_GET['inline']) ? 'inline' : 'attachment';
 header('Content-Type: '.$mime);
-header('Content-Disposition: attachment; filename="'.$asciiName.'"; filename*=UTF-8\'\''.rawurlencode($name));
+header('Content-Disposition: '.$disposition.'; filename="'.$asciiName.'"; filename*=UTF-8\'\''.rawurlencode($name));
 if ($size > 0) { header('Content-Length: '.$size); }
 header('X-Content-Type-Options: nosniff');
 

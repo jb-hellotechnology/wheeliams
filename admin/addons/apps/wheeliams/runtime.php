@@ -1807,6 +1807,39 @@
 	}
 
 	/* Recent stock movements for a component. */
+	/* A panel on the Manage Stock screen listing the part's PDF drawing(s), viewable
+	 * inline via the download proxy (read-only lister; no Drive mutation on stock views). */
+	function wheeliams_component_drawings_panel($componentID){
+		$Components = new Wheeliams_Components();
+		$c = $Components->component($componentID);
+		if(!$c) return;
+		$code = htmlspecialchars($c['partCode'], ENT_QUOTES);
+		$dt   = htmlspecialchars(wheeliams_drive_type_for($c['partCode'], $c['type']), ENT_QUOTES);
+		echo '<section class="flow no-print"><header><h2>Drawing</h2></header><article>';
+		echo '<div id="stock-drawings">Loading drawing&hellip;</div>';
+		echo '</article></section>';
+		echo <<<JS
+<script>
+(function(){
+	var box = document.getElementById('stock-drawings');
+	fetch('/drive_files.php?productCode=' + encodeURIComponent('$code') + '&type=' + encodeURIComponent('$dt'))
+		.then(function(r){ return r.json(); })
+		.then(function(d){
+			if(d.error){ box.textContent = d.error; return; }
+			var pdfs = (d.files || []).filter(function(f){ return /\.pdf$/i.test(f.name); });
+			if(!pdfs.length){ box.textContent = 'No PDF drawing attached.'; return; }
+			box.innerHTML = pdfs.map(function(f){
+				var id = encodeURIComponent(f.id);
+				return '<p><a href="/drive_download.php?id=' + id + '&inline=1" target="_blank" rel="noopener">View ' + f.name + '</a> '
+					 + '<a href="/drive_download.php?id=' + id + '" download="' + f.name + '" class="button small subtle">Download</a></p>';
+			}).join('');
+		})
+		.catch(function(){ box.textContent = 'Error loading drawing.'; });
+})();
+</script>
+JS;
+	}
+
 	function wheeliams_stock_movements_table($componentID){
 		$Stock = new Wheeliams_Stock();
 		$rows = $Stock->movements($componentID);
@@ -1902,15 +1935,33 @@
 		if($editable){ echo '<th>Edit</th><th>Delete</th>'; }
 		echo '</thead><tbody>';
 
-		// Render the BOM contents only — the product itself is the page heading, not a row.
+		// Top line: the component itself with its own assigned cost, so the total includes
+		// it and you can see at a glance whether the component has a cost of its own.
+		echo '<tr class="bom-self first-line">';
+		echo '<td><strong>'.htmlspecialchars($tree['partCode']).'</strong></td>';
+		echo '<td>'.htmlspecialchars($tree['description']).'</td>';
+		echo '<td>'.wheeliams_num($tree['extended_qty']).'</td>';
+		echo '<td>'.htmlspecialchars($tree['uom']).'</td>';
+		echo '<td>'.htmlspecialchars($tree['generic_material']).'</td>';
+		if($canCost){
+			echo '<td>'.htmlspecialchars($tree['supplierName']).'</td>';
+			echo '<td>'.((float)$tree['unit_cost'] ? '£'.number_format($tree['unit_cost'], 2) : '<span class="alert warning">no cost</span>').'</td>';
+			echo '<td>'.((float)$tree['line_cost'] ? '£'.number_format($tree['line_cost'], 2) : '').'</td>';
+		}
+		if($showFiles){ echo '<td class="no-print"></td>'; }
+		if($editable){ echo '<td></td><td></td>'; }
+		echo '</tr>';
+
+		// Render the BOM contents (the component's materials/fasteners).
 		foreach($tree['children'] as $child){
 			wheeliams_bom_rows($child, $canCost, $editable, $type, $showFiles);
 		}
 
 		echo '</tbody>';
 		if($canCost){
-			$rollup = wheeliams_bom_rollup($tree);
-			echo '<tfoot><tr><th colspan="7" style="text-align:right">Rolled-up material cost</th><th>£'.number_format($rollup, 2).'</th>';
+			// Total = the component's own cost + its rolled-up material/fastener cost.
+			$rollup = (float)$tree['line_cost'] + wheeliams_bom_rollup($tree);
+			echo '<tfoot><tr><th colspan="7" style="text-align:right">Total component cost</th><th>£'.number_format($rollup, 2).'</th>';
 			if($showFiles){ echo '<td class="no-print"></td>'; }
 			if($editable){ echo '<td></td><td></td>'; }
 			echo '</tr></tfoot>';

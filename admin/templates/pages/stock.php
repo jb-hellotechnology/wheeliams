@@ -25,6 +25,7 @@ if($action === 'manage'){
 	}else{
 		echo '<p><a href="?action=manage" class="button back">&larr; Back to list</a></p>';
 		wheeliams_form('stock_manage.html');
+		wheeliams_component_drawings_panel((int)$_GET['component']);
 		wheeliams_stock_movements_table((int)$_GET['component']);
 	}
 

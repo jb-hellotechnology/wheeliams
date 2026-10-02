@@ -1909,6 +1909,10 @@ dd {
   border-bottom: none;
 }
 
+.file-list a{
+	border:none;
+}
+
 .file-list a:hover {
   text-decoration: underline;
 }

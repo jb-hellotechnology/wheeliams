@@ -175,3 +175,57 @@ addFormConfirmation(".confirm", "Are you sure?");
 	}
   });
 })();
+
+// ── Shared file-attach uploader ─────────────────────────────────────────────
+// Wires every .drag-and-drop zone (and its sibling "Browse" input) to the Drive
+// upload, finding the form via closest('form') so it works no matter the form's
+// position on the page (the old per-form scripts hard-coded #form2_… which broke
+// drag-drop on the kit page). Blocks native SolidWorks files client-side too.
+document.addEventListener('DOMContentLoaded', function () {
+  var BLOCKED = ['sldprt', 'sldasm', 'slddrw', 'slddrt', 'sldlfp'];
+
+  document.querySelectorAll('.drag-and-drop').forEach(function (dropZone) {
+    var form = dropZone.closest('form');
+    if (!form) return;
+
+    var fileIDInput = form.querySelector('[id$="wheeliams_fileID"]');
+    var typeInput   = form.querySelector('[id$="fileType"]');
+    var partInput   = form.querySelector('[id$="partCode"]');
+    var browse      = form.querySelector('.file-browse');
+    var labelEl     = dropZone.querySelector('label');
+    if (!fileIDInput || !typeInput || !partInput) return;
+
+    function setLabel(t) { if (labelEl) labelEl.textContent = t; }
+
+    async function upload(file) {
+      if (!file) return;
+      var ext = (file.name.split('.').pop() || '').toLowerCase();
+      if (BLOCKED.indexOf(ext) !== -1) {
+        setLabel('Drop File Here');
+        alert('Native SolidWorks files (.' + ext + ') can’t be attached here. Please attach a PDF, DXF, STEP, image or document.');
+        return;
+      }
+      setLabel('Uploading: ' + file.name + '…');
+      var fd = new FormData();
+      fd.append('file', file);
+      fd.append('type', typeInput.value);
+      fd.append('partCode', partInput.value);
+      try {
+        var res = await fetch('/upload_to_drive.php', { method: 'POST', body: fd });
+        var result = await res.json();
+        if (!res.ok || result.error) throw new Error(result.error || 'Upload failed');
+        fileIDInput.value = result.fileId;
+        setLabel('✓ Uploaded: ' + file.name);
+        form.submit();
+      } catch (err) {
+        setLabel('✗ ' + err.message);
+        console.error(err);
+      }
+    }
+
+    dropZone.addEventListener('dragover',  function (e) { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', function ()  { dropZone.classList.remove('drag-over'); });
+    dropZone.addEventListener('drop',      function (e) { e.preventDefault(); dropZone.classList.remove('drag-over'); upload(e.dataTransfer.files[0]); });
+    if (browse) { browse.addEventListener('change', function () { upload(browse.files[0]); }); }
+  });
+});
