@@ -248,6 +248,7 @@
 				$dyn = json_decode($component['dynamicFields'], true) ?: array();
 				$data['component']           = $componentID;
 				$data['partCode']            = $component['partCode'];
+				$data['component_edit_url']  = wheeliams_part_edit_url($componentID, $component['type']);
 				$data['part_description']    = $dyn['part_description'] ?? '';
 				$data['unit_of_measure']     = $dyn['unit_of_measure'] ?? '';
 				$data['maximum_stock_level'] = $dyn['maximum_stock_level'] ?? '';
@@ -1907,6 +1908,7 @@ JS;
 			$data[] = array(
 				'id'          => (int)$r['componentID'],
 				'type'        => $r['type'],
+				'statusCode'  => $dyn['part_status_code'] ?? '',
 				'partCode'    => $r['partCode'],
 				'description' => $dyn['part_description'] ?? '',
 				'usedOnCount' => count($usedOn),
@@ -1921,8 +1923,9 @@ JS;
 			return $c !== 0 ? $c : strcmp($a['partCode'], $b['partCode']);
 		});
 
-		echo '<div class="table-container compact"><table class="datatable">';
-		echo '<thead class="first-row"><th>Part Code</th><th>Description</th><th>Used On</th><th>In Stock</th><th>UOM</th><th>Reorder Qty</th><th></th></thead><tbody>';
+		// Default to Part Code order (column 1) now that Part Status Code is column 0.
+		echo '<div class="table-container compact"><table class="datatable" data-order=\'[[1,"asc"]]\'>';
+		echo '<thead class="first-row"><th>Part Status Code</th><th>Part Code</th><th>Description</th><th>Used On</th><th>In Stock</th><th>UOM</th><th>Reorder Qty</th><th></th></thead><tbody>';
 		foreach($data as $d){
 			$edit   = wheeliams_part_edit_url($d['id'], $d['type']);
 			$manage = '?component='.$d['id'];
@@ -1930,6 +1933,7 @@ JS;
 				? '<a href="'.$manage.'#usedon">'.(int)$d['usedOnCount'].'</a>'
 				: '&mdash;';
 			echo '<tr>';
+			echo '<td>'.htmlspecialchars($d['statusCode']).'</td>';
 			echo '<td><a href="'.$edit.'">'.htmlspecialchars($d['partCode']).'</a></td>';
 			echo '<td>'.htmlspecialchars($d['description']).'</td>';
 			echo '<td data-order="'.(int)$d['usedOnCount'].'">'.$usedCell.'</td>';
