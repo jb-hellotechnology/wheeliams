@@ -788,7 +788,7 @@ section{
 	background:var(--color-white);
 	border-radius: var(--border-radius);
 	box-shadow: var(--shadow);
-	border:1 solid var(--light-grey);
+	border:1px solid var(--light-grey);
 }
 
 .section-grid{
@@ -1963,4 +1963,88 @@ form.fixed-submit footer{
 .email-preview h3{
 	font-family: monospace;
 	max-width:48ch;
+}
+
+.fm-section{
+	padding:0.5rem;
+}
+
+/* Part file manager (wheeliamsInitFileManager) */
+.file-manager .fm-section h3,
+.file-manager .fm-upload h3{
+	margin:0 0 0.5rem;
+	font-size:var(--size-step-1);
+}
+.file-manager .fm-section h3{
+	font-size:var(--size-step-0);
+}
+.file-manager .file-list{
+	list-style:none;
+	margin:0;
+	padding:0;
+}
+.file-manager .file-list li{
+	display:flex;
+	align-items:center;
+	gap:0.4rem;
+	padding:0.2rem 0;
+	flex-wrap:wrap;
+	font-size:1rem;
+}
+.file-manager .fm-actions{
+	margin-left:auto;
+	display:flex;
+	gap:0.35rem;
+}
+.file-manager .fm-links{
+	list-style:none;
+	margin:0;
+	padding:0;
+}
+.file-manager .fm-links li{
+	padding:0.15rem 0;
+}
+.file-manager .fm-upload{
+	margin:0.75rem 0;
+}
+.file-manager .fm-cat-label{
+	display:block;
+	margin-bottom:0.4rem;
+}
+.file-manager .fm-category{
+	margin-left:0.4rem;
+}
+.file-manager .fm-drop{
+	width:100%;
+	height:90px;
+}
+.file-manager .fm-browse-row{
+	margin-top:6px;
+}
+.file-manager .fm-status{
+	margin-left:0.5rem;
+}
+.file-manager .muted{
+	color:#777;
+	font-size:0.9em;
+}
+.file-manager .fm-archived{
+	margin-top:1rem;
+}
+.file-manager .drag-and-drop.drag-over{
+	outline:2px dashed #888;
+	outline-offset:-6px;
+}
+.file-manager .fm-icon-btn{
+	display:inline-flex;
+	align-items:center;
+	justify-content:center;
+	padding:0.2rem 0.4rem;
+	line-height:1;
+}
+.file-manager .fm-icon-btn:hover{
+	text-decoration:none;
+}
+.file-manager .fm-icon-btn .material-symbols-outlined{
+	font-size:1.1rem;
 }

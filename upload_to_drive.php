@@ -1,9 +1,16 @@
 <?php
-require_once __DIR__ . '/vendor/autoload.php';
+/**
+ * Upload a file into a part's Drive area, optionally into a named category
+ * (Drawings / Assembly / Images / Instructions / General). Native SolidWorks
+ * files are rejected. If a file of the same name already exists in the target
+ * folder the caller is asked to confirm (collision) unless overwrite=1, in
+ * which case the existing file is archived first so nothing is lost.
+ */
 include('secrets.php');
+require_once __DIR__ . '/drive_lib.php';
 header('Content-Type: application/json');
 
-// ─────────────────────────────────────────────────────────────────────────────
+if (!defined('PERCH_RUNWAY')) include($_SERVER['DOCUMENT_ROOT'].'/admin/runtime.php');
 
 function json_error(string $message, int $status = 500): void {
 	http_response_code($status);
@@ -11,17 +18,24 @@ function json_error(string $message, int $status = 500): void {
 	exit;
 }
 
+if (!perch_member_logged_in()) json_error('Not authorised.', 403);
+
 // Validate inputs
 if (empty($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
 	json_error('No file received or upload error.', 400);
 }
 
-$type     = preg_replace('/[^a-zA-Z0-9_\-]/', '', $_POST['type']     ?? '');
-$partCode = preg_replace('/[^a-zA-Z0-9_\-]/', '', $_POST['partCode'] ?? '');
+$type      = preg_replace('/[^a-zA-Z0-9_\- ]/', '', $_POST['type']     ?? '');
+$partCode  = preg_replace('/[^a-zA-Z0-9_\-]/',  '', $_POST['partCode'] ?? '');
+$category  = $_POST['category'] ?? 'General';
+$overwrite = !empty($_POST['overwrite']);
 
-if (!$type || !$partCode) {
-	json_error('Missing type or partCode.', 400);
-}
+$validTypes = ['COMPONENT', 'FASTENER', 'RAW MATERIALS', 'KIT'];
+if (!$type || !$partCode)           json_error('Missing type or partCode.', 400);
+if (!in_array($type, $validTypes))  json_error('Invalid type.', 400);
+// Keep the category within the areas valid for this part type (else the first).
+$allowedCats = wheeliams_drive_categories($type);
+if (!in_array($category, $allowedCats, true)) $category = $allowedCats[0];
 
 // Native SolidWorks files are held separately, not published on the dashboard.
 $ext = strtolower(pathinfo($_FILES['file']['name'], PATHINFO_EXTENSION));
@@ -29,67 +43,37 @@ if (in_array($ext, array('sldprt', 'sldasm', 'slddrw', 'slddrt', 'sldlfp'), true
 	json_error('Native SolidWorks files (.'.$ext.') can’t be attached here — please upload a PDF, DXF, STEP, image or document instead.', 415);
 }
 
-// Authenticate via OAuth2
-$client = new Google\Client();
-$client->setClientId(CLIENT_ID);
-$client->setClientSecret(CLIENT_SECRET);
-$client->setAccessType('offline');
-$client->addScope(Google\Service\Drive::DRIVE);
-$client->fetchAccessTokenWithRefreshToken(REFRESH_TOKEN);
+try {
+	$drive      = wheeliams_drive_service();
+	$partFolder = wheeliams_drive_part_folder($drive, $type, $partCode, true);
+	$targetId   = wheeliams_drive_category_folder($drive, $partFolder, $category, true);
 
-if ($client->isAccessTokenExpired() && !$client->getRefreshToken()) {
-	json_error('OAuth token error — re-run the auth script to get a new refresh token.');
-}
+	$fileName = basename($_FILES['file']['name']);
 
-$drive = new Google\Service\Drive($client);
-
-/**
- * Find a folder by name within a parent, or create it if it doesn't exist.
- */
-function findOrCreateFolder(Google\Service\Drive $drive, string $name, string $parentId): string {
-	$escaped = str_replace("'", "\\'", $name);
-
-	$results = $drive->files->listFiles([
-		'q'      => "mimeType='application/vnd.google-apps.folder'"
-				  . " and name='{$escaped}'"
-				  . " and '{$parentId}' in parents"
-				  . " and trashed=false",
-		'fields' => 'files(id)',
-		'orderBy' => 'createdTime',
-			'supportsAllDrives' => true,
-			'includeItemsFromAllDrives' => true,
-	]);
-
-	if (count($results->getFiles()) > 0) {
-		return $results->getFiles()[0]->getId();
+	// Same-name file already here? Ask for confirmation unless told to overwrite.
+	$existingId = wheeliams_drive_file_by_name($drive, $fileName, $targetId);
+	if ($existingId) {
+		if (!$overwrite) {
+			http_response_code(409);
+			echo json_encode([
+				'collision' => true,
+				'fileName'  => $fileName,
+				'category'  => $category,
+			]);
+			exit;
+		}
+		// Overwriting: archive the old version so it stays recoverable.
+		$archive = wheeliams_drive_archive_folder($drive, $partFolder);
+		wheeliams_drive_move($drive, $existingId, $archive);
 	}
 
-	// Create the folder
-	$folder = new Google\Service\Drive\DriveFile([
-		'name'     => $name,
-		'mimeType' => 'application/vnd.google-apps.folder',
-		'parents'  => [$parentId],
-	]);
-
-	$created = $drive->files->create($folder, ['fields' => 'id', 'supportsAllDrives' => true]);
-	return $created->getId();
-}
-
-try {
-	// Build folder path: ROOT > type > partCode
-	$typeFolderId     = findOrCreateFolder($drive, $type,     DRIVE_ROOT_FOLDER_ID);
-	$partCodeFolderId = findOrCreateFolder($drive, $partCode, $typeFolderId);
-
-	// Upload the file
 	$filePath = $_FILES['file']['tmp_name'];
-	$fileName = basename($_FILES['file']['name']);
 	$mimeType = $_FILES['file']['type'] ?: 'application/octet-stream';
 
 	$driveFile = new Google\Service\Drive\DriveFile([
 		'name'    => $fileName,
-		'parents' => [$partCodeFolderId],
+		'parents' => [$targetId],
 	]);
-
 	$uploaded = $drive->files->create($driveFile, [
 		'data'       => file_get_contents($filePath),
 		'mimeType'   => $mimeType,
@@ -102,8 +86,8 @@ try {
 		'fileId'      => $uploaded->getId(),
 		'fileName'    => $uploaded->getName(),
 		'webViewLink' => $uploaded->getWebViewLink(),
+		'category'    => $category,
 	]);
-
 } catch (Exception $e) {
 	json_error($e->getMessage());
 }

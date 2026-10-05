@@ -78,11 +78,44 @@ class Wheeliams_Components extends PerchAPI_Factory
 	}
 	
 	public function componentSuppliers($componentID){
-		
+
 		$sql = 'SELECT * FROM perch3_wheeliams_components_suppliers WHERE perch3_wheeliams_componentID='.$componentID.' ORDER BY current DESC';
 		$data = $this->db->get_rows($sql);
 		return $data;
-		
+
+	}
+
+	/* Add the per-supplier part-code / UOM columns to the component↔supplier link. */
+	protected function ensureComponentSupplierColumns(){
+		foreach(array(
+			'supplier_part_code' => 'VARCHAR(191) DEFAULT NULL',
+			'supplier_uom'       => 'VARCHAR(64) DEFAULT NULL',
+		) as $col => $def){
+			$exists = $this->db->get_row("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='perch3_wheeliams_components_suppliers' AND COLUMN_NAME='".$col."'");
+			if(!$exists){
+				$this->db->execute("ALTER TABLE perch3_wheeliams_components_suppliers ADD COLUMN ".$col." ".$def);
+			}
+		}
+	}
+
+	/* Save the supplier's own part code & UOM for this component. */
+	public function setSupplierDetails($componentID, $supplierID, $partCode, $uom){
+		$this->ensureComponentSupplierColumns();
+		$componentID = (int)$componentID;
+		$supplierID  = (int)$supplierID;
+		$sql = 'UPDATE perch3_wheeliams_components_suppliers SET supplier_part_code='.$this->db->pdb((string)$partCode)
+			 . ', supplier_uom='.$this->db->pdb((string)$uom)
+			 . ' WHERE perch3_wheeliams_componentID='.$componentID.' AND wheeliams_supplierID='.$supplierID;
+		$this->db->execute($sql);
+	}
+
+	/* The supplier's part code & UOM for this component (empty strings if unset). */
+	public function supplierDetails($componentID, $supplierID){
+		$row = $this->db->get_row('SELECT * FROM perch3_wheeliams_components_suppliers WHERE perch3_wheeliams_componentID='.(int)$componentID.' AND wheeliams_supplierID='.(int)$supplierID.' LIMIT 1');
+		return array(
+			'supplier_part_code' => $row['supplier_part_code'] ?? '',
+			'supplier_uom'       => $row['supplier_uom'] ?? '',
+		);
 	}
 	
 	public function componentPrice($componentID,$supplierID,$price,$costDate=null){

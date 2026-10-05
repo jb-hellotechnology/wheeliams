@@ -5,7 +5,9 @@
 	// ini_set('display_startup_errors', 1);
 	// error_reporting(E_ALL);
 
-	
+	// Canonical Drive file areas (shared with the standalone Drive endpoints).
+	require_once __DIR__ . '/../../../../drive_categories.php';
+
 	include('Wheeliams.class.php');
 	include('Wheeliamss.class.php');
 	include('Wheeliams.staffmember.class.php');
@@ -470,7 +472,9 @@
 						$component = $WheeliamsComponents->find($result->perch3_wheeliams_componentID());
 						
 						if($type=='manufactured'){
-							$number = str_pad($result->perch3_wheeliams_componentID(), 4, "0", STR_PAD_LEFT);
+							// Number comes from a per-series counter (prefix+component type),
+							// NOT the shared-table row id, so each series increments on its own.
+							$number = wheeliams_consume_part_number($data['part_no_prefix'], $data['component_type']);
 							$partCode = strtoupper($data['part_no_prefix'].$data['component_type'].'-'.$number.'-'.$data['part_issue_code']);
 							$record = [
 								'partCode' => $partCode
@@ -598,7 +602,18 @@
 				
 				case 'component_supplier_price':
 					$WheeliamsComponents = new Wheeliams_Components($API);
-					$WheeliamsComponents->componentPrice($_GET['id'],$SubmittedForm->data['wheeliams_supplierID'],$SubmittedForm->data['price'],$SubmittedForm->data['cost_date'] ?? null);
+					$supID = $SubmittedForm->data['wheeliams_supplierID'];
+					$newPr = $SubmittedForm->data['price'] ?? '';
+					$curPr = $WheeliamsComponents->getComponentPrice($_GET['id'], $supID);
+					// Only log a new price point when the price actually changed, so editing just
+					// the supplier part code / UOM doesn't add a duplicate price row.
+					if($newPr !== '' && (float)$newPr != (float)$curPr){
+						$WheeliamsComponents->componentPrice($_GET['id'], $supID, $newPr, $SubmittedForm->data['cost_date'] ?? null);
+					}
+					$WheeliamsComponents->setSupplierDetails($_GET['id'], $supID, $SubmittedForm->data['supplier_part_code'] ?? '', $SubmittedForm->data['supplier_uom'] ?? '');
+					// The price form is rendered once per supplier; clear these POST values so they
+					// don't repopulate (and overwrite) the other suppliers' fields on re-render.
+					unset($_POST['price'], $_POST['cost_date'], $_POST['supplier_part_code'], $_POST['supplier_uom']);
 				break;
 				
 				case 'component_supplier_remove':
@@ -665,8 +680,8 @@
 							$Stock->adjust($componentID, $SubmittedForm->data['adjust'], 'manual_adjust', $memberID, $note);
 						}
 					}
-					// Return to the manage form for the same part (shows the updated level).
-					PerchUtil::redirect('/stock/?action=manage&component='.$componentID);
+					// Return to the stock detail for the same part (shows the updated level).
+					PerchUtil::redirect('/stock/?component='.$componentID);
 				break;
 
 				case 'bom_manufactured_add':
@@ -1430,6 +1445,9 @@
 			PerchSystem::set_var('latestPrice', $latestPrice['price']);
 			PerchSystem::set_var('price', $Components->getComponentPrice($id,$supplier['wheeliams_supplierID']));
 			PerchSystem::set_var('cost_date', date('Y-m-d')); // default the cost date to today
+			$sdet = $Components->supplierDetails($id, $supplier['wheeliams_supplierID']);
+			PerchSystem::set_var('supplier_part_code', $sdet['supplier_part_code']);
+			PerchSystem::set_var('supplier_uom', $sdet['supplier_uom']);
 			wheeliams_form('component_supplier_price.html');
 			echo '<footer>';
 			wheeliams_form('component_supplier_current.html');
@@ -1751,62 +1769,41 @@
 		return array_keys($codes);
 	}
 
-	/*
-	 * A searchable table of all parts, each row linking to an action on the
-	 * current stock page (manage or lookup). Uses the DataTables 'datatable'
-	 * class from the header for search/sort/paging — far better than a huge
-	 * <select> when there are many part codes.
-	 */
-	function wheeliams_stock_picker_table($action, $label){
-		$Stock = new Wheeliams_Stock();
-		$rows  = $Stock->report();
-		if(!$rows){ echo '<p>No components found.</p>'; return; }
-		echo '<div class="table-container compact"><table class="datatable">';
-		echo '<thead class="first-row"><th>Part Code</th><th>Description</th><th>In Stock</th><th>UOM</th><th>Reorder Qty</th><th></th></thead><tbody>';
-		foreach($rows as $r){
-			if(empty($r['partCode'])) continue;
-			$dyn = json_decode($r['dynamicFields'], true) ?: array();
-			$id  = (int)$r['componentID'];
-			$cedit = ($r['type'] === 'products')
-				? '/boms/?type=products&edit=1&id='.$id
-				: '/components/?type='.htmlspecialchars((string)$r['type']).'&edit=1&id='.$id;
-			echo '<tr>';
-			echo '<td><a href="'.$cedit.'">'.htmlspecialchars($r['partCode']).'</a></td>';
-			echo '<td>'.htmlspecialchars($dyn['part_description'] ?? '').'</td>';
-			echo '<td>'.wheeliams_num($r['current_level']).'</td>';
-			echo '<td>'.htmlspecialchars($dyn['unit_of_measure'] ?? '').'</td>';
-			echo '<td>'.htmlspecialchars($dyn['reorder_quantity'] ?? '').'</td>';
-			echo '<td><a href="?action='.htmlspecialchars($action).'&component='.$id.'">'.htmlspecialchars($label).'</a></td>';
-			echo '</tr>';
-		}
-		echo '</tbody></table></div>';
-	}
-
-	/* Look-up: a table of parts (View link), or the detail panel for a selected part. */
-	function wheeliams_stock_lookup(){
-		if(empty($_GET['component'])){
-			wheeliams_stock_picker_table('lookup', 'View');
-			return;
+		/*
+		 * Detail behind the "Used On" count: the parent parts that consume this
+		 * component, each with the per-parent quantity. Summed where a parent
+		 * lists the child on more than one line.
+		 */
+		function wheeliams_used_on_detail($componentID){
+			$Boms       = new Wheeliams_Boms();
+			$Components  = new Wheeliams_Components();
+			$parents    = array();
+			foreach((array)$Boms->byPartCode($componentID) as $r){
+				$parent = $Components->component($r['id']);
+				if(!$parent || empty($parent['partCode'])) continue;
+				$pid = (int)$r['id'];
+				if(!isset($parents[$pid])){
+					$dyn = json_decode($parent['dynamicFields'], true) ?: array();
+					$parents[$pid] = array(
+						'id'          => $pid,
+						'partCode'    => $parent['partCode'],
+						'description' => $dyn['part_description'] ?? '',
+						'type'        => $parent['type'],
+						'qty'         => 0,
+					);
+				}
+				$parents[$pid]['qty'] += (float)$r['quantity'];
+			}
+			return array_values($parents);
 		}
 
-		$id = (int)$_GET['component'];
-		$Stock = new Wheeliams_Stock();
-		$component = component($id);
-		if(!$component){ echo '<p>Part not found.</p>'; return; }
-		$dyn = json_decode($component['dynamicFields'], true) ?: array();
+		/* The /components or /boms edit URL for a part (kits live under /boms). */
+		function wheeliams_part_edit_url($id, $type){
+			return ($type === 'products')
+				? '/boms/?type=products&edit=1&id='.(int)$id
+				: '/components/?type='.rawurlencode((string)$type).'&edit=1&id='.(int)$id;
+		}
 
-		echo '<p><a href="?action=lookup" class="button back">&larr; Back to list</a></p>';
-		echo '<dl class="stock-info">';
-		echo '<dt>Part Code</dt><dd>'.htmlspecialchars($component['partCode']).'</dd>';
-		echo '<dt>Description</dt><dd>'.htmlspecialchars($dyn['part_description'] ?? '').'</dd>';
-		echo '<dt>Current Stock Level</dt><dd>'.wheeliams_num($Stock->level($id)).' '.htmlspecialchars($dyn['unit_of_measure'] ?? '').'</dd>';
-		echo '<dt>Current Order Level (on order)</dt><dd>'.wheeliams_num($Stock->planned($id)).'</dd>';
-		echo '<dt>Reorder Quantity</dt><dd>'.htmlspecialchars($dyn['reorder_quantity'] ?? '').'</dd>';
-		echo '<dt>Maximum Stock Level</dt><dd>'.htmlspecialchars($dyn['maximum_stock_level'] ?? '').'</dd>';
-		echo '</dl>';
-	}
-
-	/* Recent stock movements for a component. */
 	/* A panel on the Manage Stock screen listing the part's PDF drawing(s), viewable
 	 * inline via the download proxy (read-only lister; no Drive mutation on stock views). */
 	function wheeliams_component_drawings_panel($componentID){
@@ -1840,6 +1837,36 @@
 JS;
 	}
 
+	/*
+	 * Direct BOM children of a kit, resolved for the "Component Drawings" links
+	 * on the kit file area — each child links through to its own file area
+	 * rather than duplicating its drawings on the kit. Returns [] for a part
+	 * with no BOM.
+	 */
+	function wheeliams_kit_component_links($kitComponentID){
+		$Boms       = new Wheeliams_Boms();
+		$Components  = new Wheeliams_Components();
+		$out        = array();
+		$seen       = array();
+		foreach((array)$Boms->bom((int)$kitComponentID) as $row){
+			$childID = (int)$row['partCode']; // boms.partCode holds the child componentID
+			if($childID <= 0 || isset($seen[$childID])) continue;
+			$seen[$childID] = true;
+			$c = $Components->component($childID);
+			if(!$c || empty($c['partCode'])) continue;
+			$dyn = json_decode($c['dynamicFields'], true) ?: array();
+			$out[] = array(
+				'id'          => $childID,
+				'partCode'    => $c['partCode'],
+				'description' => $dyn['part_description'] ?? '',
+				'type'        => $c['type'],
+				'driveType'   => wheeliams_drive_type_for($c['partCode'], $c['type']),
+				'url'         => '/components/?type='.rawurlencode($c['type']).'&edit=1&id='.$childID,
+			);
+		}
+		return $out;
+	}
+
 	function wheeliams_stock_movements_table($componentID){
 		$Stock = new Wheeliams_Stock();
 		$rows = $Stock->movements($componentID);
@@ -1862,11 +1889,12 @@ JS;
 	}
 
 	/*
-	 * Stock level report for all parts.
-	 * Columns: Part Code, Description, Used On, In Stock, UOM, Reorder Qty.
-	 * Sorted by used-on product code, then part code.
+	 * Unified Stock Control screen: one searchable table of every part. DataTables
+	 * search/sort IS the look-up; the per-row Manage link opens that part's stock
+	 * detail (level form + summary + used-on + drawing + movements). Replaces the
+	 * old separate Manage / Look-up / Report screens.
 	 */
-	function wheeliams_stock_report(){
+	function wheeliams_stock_table(){
 		$Stock = new Wheeliams_Stock();
 		$rows = $Stock->report();
 		if(!$rows){ echo '<p>No components found.</p>'; return; }
@@ -1877,9 +1905,11 @@ JS;
 			$dyn = json_decode($r['dynamicFields'], true) ?: array();
 			$usedOn = wheeliams_used_on($r['componentID']);
 			$data[] = array(
+				'id'          => (int)$r['componentID'],
+				'type'        => $r['type'],
 				'partCode'    => $r['partCode'],
 				'description' => $dyn['part_description'] ?? '',
-				'usedOn'      => $usedOn,
+				'usedOnCount' => count($usedOn),
 				'usedOnSort'  => $usedOn ? $usedOn[0] : 'zzzz',
 				'stock'       => (float)$r['current_level'],
 				'uom'         => $dyn['unit_of_measure'] ?? '',
@@ -1891,22 +1921,43 @@ JS;
 			return $c !== 0 ? $c : strcmp($a['partCode'], $b['partCode']);
 		});
 
-		echo '<div class="table-container compact">';
-		echo '<table class="datatable">';
-		echo '<thead class="first-row"><th>Part Code</th><th>Description</th><th>Used On</th><th>In Stock</th><th>UOM</th><th>Reorder Qty</th></thead>';
-		echo '<tbody>';
+		echo '<div class="table-container compact"><table class="datatable">';
+		echo '<thead class="first-row"><th>Part Code</th><th>Description</th><th>Used On</th><th>In Stock</th><th>UOM</th><th>Reorder Qty</th><th></th></thead><tbody>';
 		foreach($data as $d){
+			$edit   = wheeliams_part_edit_url($d['id'], $d['type']);
+			$manage = '?component='.$d['id'];
+			$usedCell = $d['usedOnCount']
+				? '<a href="'.$manage.'#usedon">'.(int)$d['usedOnCount'].'</a>'
+				: '&mdash;';
 			echo '<tr>';
-			echo '<td>'.htmlspecialchars($d['partCode']).'</td>';
+			echo '<td><a href="'.$edit.'">'.htmlspecialchars($d['partCode']).'</a></td>';
 			echo '<td>'.htmlspecialchars($d['description']).'</td>';
-			echo '<td>'.htmlspecialchars(implode(', ', $d['usedOn'])).'</td>';
+			echo '<td data-order="'.(int)$d['usedOnCount'].'">'.$usedCell.'</td>';
 			echo '<td>'.wheeliams_num($d['stock']).'</td>';
 			echo '<td>'.htmlspecialchars($d['uom']).'</td>';
 			echo '<td>'.htmlspecialchars($d['reorder']).'</td>';
+			echo '<td><a href="'.$manage.'" class="button small">Manage</a></td>';
 			echo '</tr>';
 		}
-		echo '</tbody>';
-		echo '</table></div>';
+		echo '</tbody></table></div>';
+	}
+
+	/* "Used On" detail: the parent parts (and per-parent qty) that use this part. */
+	function wheeliams_stock_used_on_panel($id){
+		$parents = wheeliams_used_on_detail($id);
+		echo '<section class="flow" id="usedon"><header><h2>Used On</h2></header><article>';
+		if(!$parents){ echo '<p>Not used on any product or kit.</p>'; echo '</article></section>'; return; }
+		echo '<div class="table-container compact"><table class="">';
+		echo '<tr class="first-row"><th>Part Code</th><th>Description</th><th>Qty Used</th></tr>';
+		foreach($parents as $p){
+			$edit = wheeliams_part_edit_url($p['id'], $p['type']);
+			echo '<tr>';
+			echo '<td><a href="'.$edit.'">'.htmlspecialchars($p['partCode']).'</a></td>';
+			echo '<td>'.htmlspecialchars($p['description']).'</td>';
+			echo '<td>'.wheeliams_num($p['qty']).'</td>';
+			echo '</tr>';
+		}
+		echo '</table></div></article></section>';
 	}
 
 	/* ---------------------------------------------------------------------
@@ -2207,6 +2258,47 @@ GRAPHQL;
 			$db->insert('perch3_wheeliams_counters', array('ckey' => $key, 'cval' => 1));
 		}
 		return ($isPO ? 'PO' : 'ENQ').str_pad($next, 4, '0', STR_PAD_LEFT);
+	}
+
+	/*
+	 * Per-series part number.
+	 *
+	 * Manufactured components/kits are all stored in the one components table, so
+	 * their old part number (the auto-increment row id) jumped every time ANY item
+	 * — a fastener, raw material, or a component in another series — was added. The
+	 * client expects each series (prefix + component type, e.g. "A02", "A06") to
+	 * increment on its own: 0001, 0002, 0003 …
+	 *
+	 * We keep a counter per series in perch3_wheeliams_counters, keyed 'part:<series>'.
+	 * On first use the counter is SEEDED from the highest number already present in
+	 * that series (under the old row-id scheme) so new parts carry on from where the
+	 * series currently sits rather than colliding with existing codes. At go-live the
+	 * client can re-import their real index and reset the counter (UPDATE the row) so
+	 * each series restarts at the correct number.
+	 *
+	 * Returns the next sequential number as a zero-padded 4-digit string.
+	 */
+	function wheeliams_consume_part_number($prefix, $componentType){
+		wheeliams_counters_install();
+		$db     = PerchDB::fetch();
+		$series = strtoupper($prefix.$componentType);
+		$key    = 'part:'.$series;
+
+		$row = $db->get_row('SELECT cval FROM perch3_wheeliams_counters WHERE ckey='.$db->pdb($key));
+		if($row){
+			$next = (int)$row['cval'] + 1;
+			$db->execute('UPDATE perch3_wheeliams_counters SET cval='.(int)$next.' WHERE ckey='.$db->pdb($key));
+		}else{
+			// Seed from the highest existing number in this series so we continue the
+			// sequence rather than clashing with part codes already in the table.
+			$maxRow = $db->get_row(
+				"SELECT MAX(CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(partCode,'-',2),'-',-1) AS UNSIGNED)) AS m "
+				."FROM perch3_wheeliams_components WHERE partCode LIKE ".$db->pdb($series.'-%'));
+			$base = ($maxRow && $maxRow['m'] !== null) ? (int)$maxRow['m'] : 0;
+			$next = $base + 1;
+			$db->insert('perch3_wheeliams_counters', array('ckey' => $key, 'cval' => $next));
+		}
+		return str_pad($next, 4, '0', STR_PAD_LEFT);
 	}
 
 	/* Distinct suppliers / component types / process types present in a run. */

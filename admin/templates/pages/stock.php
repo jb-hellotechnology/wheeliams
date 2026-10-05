@@ -13,40 +13,38 @@ $Stock->install();
 
 perch_layout('header');
 
-$action = $_GET['action'] ?? '';
 ?>
 <main class="full">
 <?php
-if($action === 'manage'){
+// One combined Stock Control screen: the searchable table of all parts (its
+// search box is the look-up) and, when a part is selected, that part's stock
+// detail — manage form, used-on, drawing and movements.
+if(!empty($_GET['component'])){
 
-	echo '<h1>Manage Stock Level</h1>';
-	if(empty($_GET['component'])){
-		wheeliams_stock_picker_table('manage', 'Manage Stock');
+	$id        = (int)$_GET['component'];
+	$component = component($id);
+	if(!$component){
+		echo '<h1>Stock Control</h1><p>Part not found. <a href="/stock/">Back to stock list</a></p>';
 	}else{
-		echo '<p><a href="?action=manage" class="button back">&larr; Back to list</a></p>';
+		$dyn = json_decode($component['dynamicFields'], true) ?: array();
+		echo '<h1>'.htmlspecialchars(($dyn['part_description'] ?? 'Stock').' ('.$component['partCode'].')').'</h1>';
+		echo '<p><a href="/stock/" class="button back">&larr; Back to stock list</a></p>';
+		echo '<div class="split">';
+		echo '<div>';
 		wheeliams_form('stock_manage.html');
-		wheeliams_component_drawings_panel((int)$_GET['component']);
-		wheeliams_stock_movements_table((int)$_GET['component']);
+		wheeliams_stock_used_on_panel($id);
+		echo '</div>';
+		echo '<div>';
+		wheeliams_component_drawings_panel($id);
+		wheeliams_stock_movements_table($id);
+		echo '</div>';
+		echo '</div>';
 	}
-
-}elseif($action === 'lookup'){
-
-	echo '<h1>Stock Look-up</h1>';
-	wheeliams_stock_lookup();
-
-}elseif($action === 'report'){
-
-	echo '<h1>Stock Level Report</h1>';
-	wheeliams_stock_report();
 
 }else{
 
 	echo '<h1>Stock Control</h1>';
-	echo '<div class="option-grid">';
-	echo '<div class="option-card"><h2><a href="/stock/?action=manage">Manage Stock Level</a></h2></div>';
-	echo '<div class="option-card"><h2><a href="/stock/?action=lookup">Look-up</a></h2></div>';
-	echo '<div class="option-card"><h2><a href="/stock/?action=report">Stock Report</a></h2></div>';
-	echo '</div>';
+	wheeliams_stock_table();
 
 }
 ?>

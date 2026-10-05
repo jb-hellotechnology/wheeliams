@@ -2,14 +2,14 @@
 /**
  * READ-ONLY Google Drive file lister for a part code.
  *
- * Unlike organise_drive_files.php (which moves/creates/deletes files as a side
- * effect), this only *lists* the files already organised under /<TYPE>/<code>/,
- * recursing into subfolders and reporting each file's category via `path`
- * (the subfolder it lives in — e.g. Drawings, Instructions, Images). Safe to
- * call on every page view.
+ * Lists the files already organised under /<TYPE>/<code>/, recursing into
+ * category subfolders (Drawings, Assembly, Images, Instructions, …) and
+ * reporting each file's `category` (loose files in the part folder = General).
+ * The ARCHIVE subfolder is excluded from the active list; pass scope=archived
+ * to list only archived files. Safe to call on every page view.
  */
-require_once __DIR__ . '/vendor/autoload.php';
 include('secrets.php');
+require_once __DIR__ . '/drive_lib.php';
 header('Content-Type: application/json');
 
 if (!defined('PERCH_RUNWAY')) include($_SERVER['DOCUMENT_ROOT'].'/admin/runtime.php');
@@ -27,90 +27,29 @@ if (!perch_member_logged_in()) {
 
 $productCode = preg_replace('/[^a-zA-Z0-9_\-]/', '', $_GET['productCode'] ?? '');
 $type        = preg_replace('/[^a-zA-Z0-9_\- ]/', '', $_GET['type']        ?? '');
+$scope       = ($_GET['scope'] ?? 'active') === 'archived' ? 'archived' : 'active';
 $validTypes  = ['COMPONENT', 'FASTENER', 'RAW MATERIALS', 'KIT'];
 
 if (!$productCode)                 json_error('Missing productCode.', 400);
 if (!in_array($type, $validTypes)) json_error('Invalid type.', 400);
 
-$client = new Google\Client();
-$client->setClientId(CLIENT_ID);
-$client->setClientSecret(CLIENT_SECRET);
-$client->setAccessType('offline');
-$client->addScope(Google\Service\Drive::DRIVE);
-$client->fetchAccessTokenWithRefreshToken(REFRESH_TOKEN);
-$drive = new Google\Service\Drive($client);
-
-/* Find a folder by name within a parent — returns id or null (never creates). */
-function findFolder(Google\Service\Drive $drive, string $name, string $parentId): ?string {
-	$escaped = str_replace("'", "\\'", $name);
-	$results = $drive->files->listFiles([
-		'q'      => "mimeType='application/vnd.google-apps.folder'"
-				  . " and name='{$escaped}' and '{$parentId}' in parents and trashed=false",
-		'fields' => 'files(id)',
-		'orderBy' => 'createdTime',
-		'supportsAllDrives' => true,
-		'includeItemsFromAllDrives' => true,
-	]);
-	$files = $results->getFiles();
-	return count($files) ? $files[0]->getId() : null;
-}
-
-/* Recursively list non-folder files under a folder; $path = category (subfolder chain). */
-function listFilesRecursive(Google\Service\Drive $drive, string $folderId, string $path = ''): array {
-	$out = [];
-
-	$pageToken = null;
-	do {
-		$params = [
-			'q'      => "'{$folderId}' in parents and mimeType != 'application/vnd.google-apps.folder' and trashed=false",
-			'fields' => 'nextPageToken, files(id, name, mimeType, webViewLink)',
-			'supportsAllDrives' => true,
-			'includeItemsFromAllDrives' => true,
-		];
-		if ($pageToken) $params['pageToken'] = $pageToken;
-		$res = $drive->files->listFiles($params);
-		foreach ($res->getFiles() as $f) {
-			$out[] = [
-				'id'          => $f->getId(),
-				'name'        => $f->getName(),
-				'mimeType'    => $f->getMimeType(),
-				'webViewLink' => $f->getWebViewLink(),
-				'path'        => $path,
-			];
-		}
-		$pageToken = $res->getNextPageToken();
-	} while ($pageToken);
-
-	$subFolders = [];
-	$pageToken  = null;
-	do {
-		$params = [
-			'q'      => "'{$folderId}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed=false",
-			'fields' => 'nextPageToken, files(id, name)',
-			'supportsAllDrives' => true,
-			'includeItemsFromAllDrives' => true,
-		];
-		if ($pageToken) $params['pageToken'] = $pageToken;
-		$res = $drive->files->listFiles($params);
-		$subFolders = array_merge($subFolders, $res->getFiles());
-		$pageToken = $res->getNextPageToken();
-	} while ($pageToken);
-
-	foreach ($subFolders as $sub) {
-		$subPath = $path ? $path . ' / ' . $sub->getName() : $sub->getName();
-		$out = array_merge($out, listFilesRecursive($drive, $sub->getId(), $subPath));
-	}
-	return $out;
-}
-
 try {
-	$typeFolder = findFolder($drive, $type, DRIVE_ROOT_FOLDER_ID);
-	if (!$typeFolder) { echo json_encode(['files' => []]); exit; }
+	$drive      = wheeliams_drive_service();
+	$partFolder = wheeliams_drive_part_folder($drive, $type, $productCode, false);
+	if (!$partFolder) { echo json_encode(['files' => []]); exit; }
 
-	$productFolder = findFolder($drive, $productCode, $typeFolder);
-	if (!$productFolder) { echo json_encode(['files' => []]); exit; }
+	$files = $scope === 'archived'
+		? wheeliams_drive_list_archived($drive, $partFolder)
+		: wheeliams_drive_list_files($drive, $partFolder);
 
-	echo json_encode(['files' => listFilesRecursive($drive, $productFolder)]);
+	// `path` kept as a back-compat alias (root = '' as before); `category`
+	// is the canonical field used by the file manager.
+	foreach ($files as &$f) {
+		$f['path'] = ($f['category'] === 'General') ? '' : $f['category'];
+	}
+	unset($f);
+
+	echo json_encode(['files' => $files]);
 } catch (Exception $e) {
 	json_error($e->getMessage());
 }

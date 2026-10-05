@@ -70,13 +70,15 @@ perch_layout('header');
 				echo '<h2>Files</h2>';
 				echo '</header>';
 				echo '<article>';
-				echo '<div id="product-files">
-				<div id="product-files-list"></div>
-				</div>';
-				echo '<script>loadProductFiles("'.$componentData['partCode'].'", "KIT");</script>';
+				echo '<div id="product-files"></div>';
+				$kitLinks = wheeliams_kit_component_links((int)$_GET['id']);
+				$canEdit  = wheeliams_can_order() ? 'true' : 'false';
+				echo '<script>wheeliamsInitFileManager("product-files", '
+					.json_encode($componentData['partCode']).', "KIT", { canEdit: '.$canEdit
+					.', categories: '.json_encode(wheeliams_drive_categories('KIT'))
+					.', kitLinks: '.json_encode($kitLinks).' });</script>';
 				echo '</article>';
 				echo '</section>';
-				wheeliams_form('bom_file_add-'.$_GET['type'].'.html');
 			}
 
 			echo '</div>';

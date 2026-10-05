@@ -103,20 +103,39 @@ class Wheeliams_Order_Email
             'DATE'            => date('d/m/Y'),
             'COMPONENT_TYPE'  => $po['component_type'],
             'PROCESS_TYPE'    => $po['process_type'],
-            'ORDER_TABLE'     => $this->orderTable($lines),
+            'ORDER_TABLE'     => $this->orderTable($lines, (int)($po['supplierID'] ?? 0)),
         );
     }
 
-    protected function orderTable($lines)
+    protected function orderTable($lines, $supplierID = 0)
     {
-        $html  = '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse">';
-        $html .= '<thead><tr><th>Part Code</th><th>Description</th><th>Order Qty</th><th>UOM</th><th>Note</th></tr></thead><tbody>';
+        $Components = new Wheeliams_Components();
+
+        // Pull this supplier's own part code / UOM for each line; only add the columns
+        // to the table if at least one line actually has them populated.
+        $details = array(); $hasCode = false; $hasUom = false;
         foreach($lines as $l){
+            $d = $supplierID ? $Components->supplierDetails((int)$l['componentID'], $supplierID)
+                             : array('supplier_part_code' => '', 'supplier_uom' => '');
+            $details[] = $d;
+            if($d['supplier_part_code'] !== '') $hasCode = true;
+            if($d['supplier_uom'] !== '')       $hasUom  = true;
+        }
+
+        $html  = '<table border="1" cellpadding="6" cellspacing="0" style="border-collapse:collapse">';
+        $html .= '<thead><tr>';
+        if($hasCode) $html .= '<th>Supplier Code</th>';
+        $html .= '<th>Part Code</th><th>Description</th><th>Order Qty</th><th>UOM</th><th>Note</th></tr></thead><tbody>';
+        foreach($lines as $i => $l){
+            $d = $details[$i];
+            // Use the supplier's own UOM where they've given one, otherwise ours.
+            $uom = ($d['supplier_uom'] !== '') ? $d['supplier_uom'] : $l['uom'];
             $html .= '<tr>';
+            if($hasCode) $html .= '<td>'.htmlspecialchars($d['supplier_part_code']).'</td>';
             $html .= '<td>'.htmlspecialchars($l['partCode']).'</td>';
             $html .= '<td>'.htmlspecialchars($l['description']).'</td>';
             $html .= '<td>'.wheeliams_num($l['order_qty']).'</td>';
-            $html .= '<td>'.htmlspecialchars($l['uom']).'</td>';
+            $html .= '<td>'.htmlspecialchars($uom).'</td>';
             $html .= '<td>'.htmlspecialchars($l['supplier_note']).'</td>';
             $html .= '</tr>';
         }
