@@ -73,12 +73,10 @@ perch_layout('header');
 				echo '</header>';
 				echo '<article>';
 				echo '<div id="product-files"></div>';
-				$kitLinks = wheeliams_kit_component_links((int)$_GET['id']);
 				$canEdit  = wheeliams_can_order() ? 'true' : 'false';
 				echo '<script>wheeliamsInitFileManager("product-files", '
 					.json_encode($componentData['partCode']).', "KIT", { canEdit: '.$canEdit
-					.', categories: '.json_encode(wheeliams_drive_categories('KIT'))
-					.', kitLinks: '.json_encode($kitLinks).' });</script>';
+					.', categories: '.json_encode(wheeliams_drive_categories('KIT')).' });</script>';
 				echo '</article>';
 				echo '</section>';
 			}

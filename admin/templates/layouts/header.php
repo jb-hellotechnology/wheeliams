@@ -43,13 +43,11 @@
 		// ── Part file manager ───────────────────────────────────────────────
 		// Renders a part's Drive documents grouped by area, with upload-into-area,
 		// delete (which archives, recoverably), restore, and an overwrite prompt on
-		// name clashes. The areas come from opts.categories (KITs use the fixed
-		// numbered folders; other parts use a single General area). Kits also get a
-		// "Component Drawings" list linking to each child part's own file area.
+		// name clashes. The areas come from opts.categories (KITs and COMPONENTs
+		// use their fixed sets; other parts use a single General area).
 		function wheeliamsInitFileManager(mountId, code, type, opts) {
 			opts = opts || {};
 			var canEdit  = opts.canEdit !== false;
-			var kitLinks = opts.kitLinks || [];
 			var mount = document.getElementById(mountId);
 			if (!mount) return;
 			var CATS = (opts.categories && opts.categories.length) ? opts.categories : ['General'];
@@ -59,20 +57,6 @@
 			var root = document.createElement('div');
 			root.className = 'file-manager flow';
 			mount.appendChild(root);
-
-			// Component-drawing links (kits only).
-			if (kitLinks.length) {
-				var cd = document.createElement('section');
-				cd.className = 'fm-section flow';
-				var ch = '<h3>Component Drawings</h3><ul class="fm-links">';
-				kitLinks.forEach(function (k) {
-					ch += '<li><a href="' + k.url + '">' + escapeHtml(k.partCode) + '</a>'
-						+ (k.description ? ' <span class="muted">' + escapeHtml(k.description) + '</span>' : '') + '</li>';
-				});
-				ch += '</ul>';
-				cd.innerHTML = ch;
-				root.appendChild(cd);
-			}
 
 			// Existing files first, then the upload control below them.
 			var listBox = document.createElement('div');

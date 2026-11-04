@@ -1577,20 +1577,21 @@
 			echo '<tbody>';
 			
 			foreach($existing as $setting){
-				$dynamic = json_decode($setting['dynamicFields'],true);
-				$product = $WheeliamsComponents->byPartCode($setting['partCode']);
-				$productJson = json_decode($product['dynamicFields'], true);
+				// boms.partCode holds the CHILD componentID, so resolve by id (not part code).
+				$product = $WheeliamsComponents->component((int)$setting['partCode']);
+				if(!$product || empty($product['partCode'])) continue;
+				$url = wheeliams_part_edit_url($product['perch3_wheeliams_componentID'], $product['type']);
 				echo '<tr>';
-				echo '<td><a href="?type='.$product['type'].'&edit=1&id='.$product['perch3_wheeliams_componentID'].'">'.$setting['partCode'].'</a></td>';
+				echo '<td><a href="'.$url.'">'.htmlspecialchars($product['partCode']).'</a></td>';
 				echo '</tr>';
 			}
 			echo '</tbody>';
 			echo '</table></article></section>';
-		
+
 		}
-		
+
 	}
-	
+
 	function wheeliams_supplier_contact_table($id){
 		
 		$WheeliamsSuppliers = new Wheeliams_Suppliers($API);
@@ -1837,36 +1838,6 @@
 })();
 </script>
 JS;
-	}
-
-	/*
-	 * Direct BOM children of a kit, resolved for the "Component Drawings" links
-	 * on the kit file area — each child links through to its own file area
-	 * rather than duplicating its drawings on the kit. Returns [] for a part
-	 * with no BOM.
-	 */
-	function wheeliams_kit_component_links($kitComponentID){
-		$Boms       = new Wheeliams_Boms();
-		$Components  = new Wheeliams_Components();
-		$out        = array();
-		$seen       = array();
-		foreach((array)$Boms->bom((int)$kitComponentID) as $row){
-			$childID = (int)$row['partCode']; // boms.partCode holds the child componentID
-			if($childID <= 0 || isset($seen[$childID])) continue;
-			$seen[$childID] = true;
-			$c = $Components->component($childID);
-			if(!$c || empty($c['partCode'])) continue;
-			$dyn = json_decode($c['dynamicFields'], true) ?: array();
-			$out[] = array(
-				'id'          => $childID,
-				'partCode'    => $c['partCode'],
-				'description' => $dyn['part_description'] ?? '',
-				'type'        => $c['type'],
-				'driveType'   => wheeliams_drive_type_for($c['partCode'], $c['type']),
-				'url'         => '/components/?type='.rawurlencode($c['type']).'&edit=1&id='.$childID,
-			);
-		}
-		return $out;
 	}
 
 	/*

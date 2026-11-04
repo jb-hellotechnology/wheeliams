@@ -18,21 +18,31 @@ if (!function_exists('wheeliams_drive_categories')) {
 	/* The KIT areas, in display order (archive is handled separately). */
 	function wheeliams_drive_kit_categories() {
 		return array(
-			'01 - PROFILE & FORM',
-			'02 - BOUGHT OUT ITEMS',
-			'03 - WELDED ASSEMBLIES',
-			'04 - MECHANICAL ASSEMBLIES',
+			'01 - BOUGHT OUT ITEMS',
+			'02 - PROFILE & FORM',
+			'03 - WORKSHOP COMPONENTS',
+			'04 - WORKSHOP ASSEMBLIES',
 			'05 - PARTS LISTS & INSTRUCTIONS',
-			'06 - VISUALS',
+			'06 - SCANS',
+			'07 - 3D PRINT DATA',
+			'08 - PRODUCT VISUALS',
 		);
 	}
 
+	/* The COMPONENT file areas (original spec: typed fields + General). 'General'
+	   is the part-folder root; the rest are named subfolders. */
+	function wheeliams_drive_component_categories() {
+		return array('DRAWINGS', 'STEP', 'DXF', 'STL', 'General');
+	}
+
 	/*
-	 * Upload-target areas for a Drive type. KITs use the fixed numbered set
-	 * above; other part types keep a single General area (the part-folder
-	 * root, no subfolder).
+	 * Upload-target areas for a Drive type. KITs and COMPONENTs use their fixed
+	 * sets above; other part types (fasteners, raw materials) keep a single
+	 * General area (the part-folder root, no subfolder).
 	 */
 	function wheeliams_drive_categories($driveType) {
-		return ($driveType === 'KIT') ? wheeliams_drive_kit_categories() : array('General');
+		if ($driveType === 'KIT')       return wheeliams_drive_kit_categories();
+		if ($driveType === 'COMPONENT') return wheeliams_drive_component_categories();
+		return array('General');
 	}
 }

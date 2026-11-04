@@ -55,15 +55,21 @@ perch_layout('header');
 				echo '<h2>Files</h2>';
 				echo '</header>';
 				echo '<article>';
-				echo '<div id="product-files"></div>';
 				// Resolve the Drive folder type from the part code (A06→KIT, A02→COMPONENT)
 				// rather than the page's tab, so A06 kits look in /KIT, not /COMPONENT.
 				$driveType = wheeliams_drive_type_for($componentData['partCode'], $_GET['type']);
-				$canEdit   = wheeliams_can_order() ? 'true' : 'false';
-				echo '<script>wheeliamsInitFileManager("product-files", '
-					.json_encode($componentData['partCode']).', '.json_encode($driveType)
-					.', { canEdit: '.$canEdit
-					.', categories: '.json_encode(wheeliams_drive_categories($driveType)).' });</script>';
+				if($driveType === 'KIT'){
+					// A kit's documents belong on (and are managed from) its KIT BOM page,
+					// not here — this entry is just the kit's component record.
+					echo '<p>This is a kit. Manage its documents on the <a href="/boms/?type=products&edit=1&id='.(int)$_GET['id'].'">KIT BOM page</a>.</p>';
+				}else{
+					echo '<div id="product-files"></div>';
+					$canEdit = wheeliams_can_order() ? 'true' : 'false';
+					echo '<script>wheeliamsInitFileManager("product-files", '
+						.json_encode($componentData['partCode']).', '.json_encode($driveType)
+						.', { canEdit: '.$canEdit
+						.', categories: '.json_encode(wheeliams_drive_categories($driveType)).' });</script>';
+				}
 				echo '</article>';
 				echo '</section>';
 				
