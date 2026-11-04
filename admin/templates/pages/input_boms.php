@@ -34,6 +34,8 @@ perch_layout('header');
 			if(!empty($_GET['id'])){
 				/* Multilevel BOM with Edit/Delete on this product's direct lines */
 				wheeliams_bom_explosion_table((int)$_GET['id'], true, $_GET['type']);
+				/* Paste-to-import panel (match part numbers to the database) */
+				wheeliams_bom_import_panel((int)$_GET['id'], $_GET['type']);
 			}
 			echo '<div class="split">';
 			echo '<div>';

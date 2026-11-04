@@ -85,6 +85,7 @@ perch_layout('header');
 				
 			}
 			if($_GET['edit']){
+				echo '<p><a href="/stock/?component='.(int)$_GET['id'].'" class="button manage-stock">Manage Stock</a></p>';
 				echo '<p><a href="/components/?type='.$_GET['type'].'" class="button back">&larr; Back</a></p>';
 			}
 		}

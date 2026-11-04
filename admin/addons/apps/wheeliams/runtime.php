@@ -1232,7 +1232,7 @@
 			echo '<th>Part Code</th>';
 			
 			if($type=='manufactured'){
-				echo '<th>Description</th><th>Product Short Code</th><th>Part Status</th><th>Vehicle</th><th>UOM</th>';
+				echo '<th>Description</th><th>Product Group</th><th>Product Short Code</th><th>Part Status</th><th>Vehicle</th><th>UOM</th>';
 			}elseif($type=='raw-materials'){
 				echo '<th>Mass/Unit Length (Kg)</th><th>UOM</th><th>Max Stock</th><th>Reorder Qty</th><th>Rounding Qty</th>';
 			}
@@ -1254,6 +1254,7 @@
 					$vehicle = $dynamic['vehicle'] ?? '';
 					if(is_array($vehicle)) $vehicle = implode(', ', $vehicle);
 					echo '<td>'.htmlspecialchars($dynamic['part_description'] ?? '').'</td>';
+					echo '<td>'.htmlspecialchars($dynamic['product_group'] ?? '').'</td>';
 					echo '<td>'.htmlspecialchars($dynamic['product_short_code'] ?? '').'</td>';
 					echo '<td>'.htmlspecialchars($dynamic['part_status_code'] ?? '').'</td>';
 					echo '<td>'.htmlspecialchars($vehicle).'</td>';
@@ -1868,6 +1869,148 @@ JS;
 		return $out;
 	}
 
+	/*
+	 * "Quick Import" panel for a BOM page. The user pastes tab-separated rows
+	 * from their BOM spreadsheet; the panel previews them (matching each part
+	 * number to the database and flagging any that don't exist) and, only when
+	 * every line matches, imports them as BOM lines. Talks to /bom_import.php.
+	 */
+	function wheeliams_bom_import_panel($kitID, $type){
+		$kitID = (int)$kitID;
+		$type  = ($type === 'products') ? 'products' : 'manufactured';
+		echo '<section id="bom-import" class="bom-import flow" data-kit="'.$kitID.'" data-type="'.$type.'">';
+		echo '<header><h2>Quick Import</h2></header>';
+		echo '<article class="flow">';
+		echo '<p class="muted">Paste rows copied from your BOM spreadsheet &mdash; Part Number, Description and Qty columns. Every part number must already exist in the database.</p>';
+		echo '<textarea class="bi-input" rows="6" placeholder="Paste your rows here&hellip;"></textarea>';
+		echo '<div><button type="button" class="button primary bi-preview">Preview</button></div>';
+		echo '<div class="bi-result" hidden></div>';
+		echo '</article>';
+		echo '</section>';
+		echo <<<'JS'
+<script>
+(function(){
+	var box = document.getElementById('bom-import');
+	if(!box || box.dataset.wired) return;
+	box.dataset.wired = '1';
+	var kitID = box.dataset.kit, type = box.dataset.type;
+	var ta        = box.querySelector('.bi-input');
+	var previewBtn= box.querySelector('.bi-preview');
+	var result    = box.querySelector('.bi-result');
+	var columns   = [];
+
+	function esc(s){ return (window.escapeHtml ? escapeHtml(String(s)) : String(s)); }
+
+	function post(action, extra){
+		var fd = new FormData();
+		fd.append('action', action);
+		fd.append('kitID', kitID);
+		fd.append('type', type);
+		fd.append('data', ta.value);
+		if(extra){ Object.keys(extra).forEach(function(k){ if(extra[k] !== null && extra[k] !== undefined) fd.append(k, extra[k]); }); }
+		return fetch('/bom_import.php', { method:'POST', body:fd }).then(function(r){ return r.json().then(function(j){ return { status:r.status, body:j }; }); });
+	}
+
+	function mappingFromControls(){
+		var hdr  = box.querySelector('.bi-header');
+		var part = box.querySelector('.bi-col-part');
+		var desc = box.querySelector('.bi-col-desc');
+		var qty  = box.querySelector('.bi-col-qty');
+		return {
+			has_header: (hdr && hdr.checked) ? 1 : 0,
+			part_col: part ? part.value : '',
+			desc_col: desc ? desc.value : '',
+			qty_col:  qty  ? qty.value  : ''
+		};
+	}
+
+	function columnSelect(cls, selectedIdx, allowNone){
+		var s = '<select class="'+cls+'">';
+		if(allowNone) s += '<option value="">(none)</option>';
+		columns.forEach(function(label, i){
+			s += '<option value="'+i+'"'+(i === selectedIdx ? ' selected' : '')+'>'+esc(label)+'</option>';
+		});
+		return s + '</select>';
+	}
+
+	function render(d){
+		columns = d.columns || [];
+		var m = d.mapping || {};
+		var html = '';
+
+		html += '<div class="bi-mapping">';
+		html += '<label><input type="checkbox" class="bi-header"'+(d.hasHeader ? ' checked' : '')+'> First row is a header</label>';
+		html += '<div class="bi-map-row"><span>Part Number</span>'+columnSelect('bi-col-part', m.part, false)+'</div>';
+		html += '<div class="bi-map-row"><span>Description</span>'+columnSelect('bi-col-desc', m.desc, true)+'</div>';
+		html += '<div class="bi-map-row"><span>Quantity</span>'+columnSelect('bi-col-qty', m.qty, false)+'</div>';
+		html += '</div>';
+
+		var lines = d.lines || [];
+		html += '<div class="table-container compact"><table><thead class="first-row">'
+			 + '<th>#</th><th>Part Number</th><th>Description</th><th>Qty</th><th>Status</th></thead><tbody>';
+		lines.forEach(function(l){
+			var cls = l.status === 'error' ? ' class="bi-error"' : '';
+			var icon = l.status === 'error' ? '&#10007; ' : '&#10003; ';
+			html += '<tr'+cls+'><td>'+l.row+'</td><td>'+esc(l.partNumber)+'</td><td>'+esc(l.description)+'</td><td>'+esc(l.quantity)+'</td>'
+				 + '<td>'+icon+esc(l.message || (l.status === 'ok' ? 'OK' : ''))+'</td></tr>';
+		});
+		html += '</tbody></table></div>';
+
+		if(d.errorCount > 0){
+			html += '<p class="alert error">'+d.errorCount+' line(s) can&rsquo;t be imported &mdash; fix or remove the highlighted rows. Nothing is imported until every line matches.</p>';
+		}else{
+			html += '<p class="alert success">'+d.okCount+' line(s) ready to import.</p>';
+		}
+		html += '<div><button type="button" class="button primary bi-import"'+(d.canImport ? '' : ' disabled')+'>Import '+d.okCount+' line(s)</button></div>';
+
+		result.innerHTML = html;
+		result.hidden = false;
+
+		box.querySelectorAll('.bi-header, .bi-col-part, .bi-col-desc, .bi-col-qty').forEach(function(el){
+			el.addEventListener('change', doPreview);
+		});
+		var imp = box.querySelector('.bi-import');
+		if(imp) imp.addEventListener('click', doImport);
+	}
+
+	function doPreview(useMapping){
+		if(!ta.value.trim()){ result.hidden = true; return; }
+		previewBtn.disabled = true;
+		var extra = (useMapping === true) ? mappingFromControls() : null;
+		post('preview', extra).then(function(res){
+			previewBtn.disabled = false;
+			if(res.body.error){ result.hidden = false; result.innerHTML = '<p class="alert error">'+esc(res.body.error)+'</p>'; return; }
+			render(res.body);
+		}).catch(function(){ previewBtn.disabled = false; result.hidden = false; result.innerHTML = '<p class="alert error">Could not read the pasted data.</p>'; });
+	}
+
+	function doImport(){
+		var imp = box.querySelector('.bi-import');
+		if(imp) imp.disabled = true;
+		post('import', mappingFromControls()).then(function(res){
+			if(res.body.ok){
+				result.innerHTML = '<p class="alert success">Imported '+res.body.total+' line(s) ('+res.body.added+' added, '+res.body.updated+' updated). Reloading&hellip;</p>';
+				setTimeout(function(){ location.reload(); }, 900);
+				return;
+			}
+			if(imp) imp.disabled = false;
+			if(res.body.lines){ render({ columns: columns, hasHeader: (box.querySelector('.bi-header')||{}).checked, mapping: mappingFromControls2(), lines: res.body.lines, okCount: (res.body.lines.length - (res.body.errorCount||0)), errorCount: res.body.errorCount||0, canImport:false }); }
+			result.insertAdjacentHTML('afterbegin', '<p class="alert error">'+esc(res.body.error || 'Import failed.')+'</p>');
+		}).catch(function(){ if(imp) imp.disabled = false; });
+	}
+
+	// Map current control values back to numeric indexes for a re-render.
+	function mappingFromControls2(){
+		var m = mappingFromControls();
+		return { part: m.part === '' ? null : parseInt(m.part,10), desc: m.desc === '' ? null : parseInt(m.desc,10), qty: m.qty === '' ? null : parseInt(m.qty,10) };
+	}
+
+	previewBtn.addEventListener('click', function(){ doPreview(false); });
+})();
+</script>
+JS;
+	}
+
 	function wheeliams_stock_movements_table($componentID){
 		$Stock = new Wheeliams_Stock();
 		$rows = $Stock->movements($componentID);
@@ -1979,10 +2122,15 @@ JS;
 		if(!$tree){ echo '<p>Component not found.</p>'; return; }
 		if(empty($tree['children'])){ echo '<p>No BOM defined for this item.</p>'; return; }
 
+		// Direct BOM lines in part-code order; the item itself is pinned on the top
+		// line below. (No DataTables here — it would re-sort the whole table, pushing
+		// the pinned top line into the middle and scrambling the multilevel indenting.)
+		usort($tree['children'], function($a, $b){ return strnatcasecmp($a['partCode'], $b['partCode']); });
+
 		// Process + supplier/cost columns are only shown on the editable (admin) BOM.
 		$canCost = $editable && wheeliams_can_order();
 
-		echo '<div class="table-container compact"><table class="datatable bom-explosion">';
+		echo '<div class="table-container compact"><table class="bom-explosion">';
 		echo '<thead class="first-row">';
 		echo '<th>Part Code</th><th>Description</th><th>Qty</th><th>UOM</th><th>Material</th>';
 		if($canCost){ echo '<th>Supplier</th><th>Unit Cost</th><th>Line Cost</th>'; }
@@ -1993,7 +2141,8 @@ JS;
 		// Top line: the component itself with its own assigned cost, so the total includes
 		// it and you can see at a glance whether the component has a cost of its own.
 		echo '<tr class="bom-self first-line">';
-		echo '<td><strong>'.htmlspecialchars($tree['partCode']).'</strong></td>';
+		$selfUrl = wheeliams_part_edit_url($componentID, $tree['type']);
+		echo '<td><strong><a href="'.$selfUrl.'">'.htmlspecialchars($tree['partCode']).'</a></strong></td>';
 		echo '<td>'.htmlspecialchars($tree['description']).'</td>';
 		echo '<td>'.wheeliams_num($tree['extended_qty']).'</td>';
 		echo '<td>'.htmlspecialchars($tree['uom']).'</td>';
@@ -2016,7 +2165,8 @@ JS;
 		if($canCost){
 			// Total = the component's own cost + its rolled-up material/fastener cost.
 			$rollup = (float)$tree['line_cost'] + wheeliams_bom_rollup($tree);
-			echo '<tfoot><tr><th colspan="7" style="text-align:right">Total component cost</th><th>£'.number_format($rollup, 2).'</th>';
+			$totalLabel = ($type === 'products') ? 'Total kit material cost' : 'Total material cost';
+			echo '<tfoot><tr><th colspan="7" style="text-align:right">'.$totalLabel.'</th><th>£'.number_format($rollup, 2).'</th>';
 			if($showFiles){ echo '<td class="no-print"></td>'; }
 			if($editable){ echo '<td></td><td></td>'; }
 			echo '</tr></tfoot>';
@@ -2222,7 +2372,14 @@ GRAPHQL;
 	/* Replace {PLACEHOLDER} tokens in a string. */
 	function wheeliams_render_placeholders($text, $vars){
 		if($text === null) return '';
+		// Conditional blocks: {IF_FLAG}...{/IF_FLAG}. Kept when the FLAG var is
+		// truthy, removed entirely otherwise — e.g. an attachments note that should
+		// only appear when files are actually attached ({IF_ATTACHMENTS}...).
+		$text = preg_replace_callback('/\{IF_([A-Z0-9_]+)\}(.*?)\{\/IF_\1\}/s', function($m) use ($vars){
+			return !empty($vars[$m[1]]) ? $m[2] : '';
+		}, $text);
 		foreach($vars as $k => $v){
+			if(is_bool($v)) continue; // flags drive {IF_...} blocks only, not substitution
 			$text = str_replace('{'.$k.'}', $v, $text);
 		}
 		return $text;

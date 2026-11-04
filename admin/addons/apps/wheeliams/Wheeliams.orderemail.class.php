@@ -41,8 +41,11 @@ class Wheeliams_Order_Email
         }
         $orderingName = trim(($ordering['first_name'] ?? '').' '.($ordering['last_name'] ?? '')) ?: $po['supplierName'];
 
+        // Gather attachments first so the email body can note them conditionally.
+        $attachments = $this->attachments($lines);
+
         // {SUPPLIER_EMAIL} resolves to the ORDERING contact.
-        $vars = $this->vars($po, $lines, $orderingEmail);
+        $vars = $this->vars($po, $lines, $orderingEmail, count($attachments) > 0);
 
         $to = trim(wheeliams_render_placeholders($template['email_to'], $vars));
         if(!filter_var($to, FILTER_VALIDATE_EMAIL)) $to = $orderingEmail; // fall back to the ordering contact
@@ -50,8 +53,6 @@ class Wheeliams_Order_Email
         $subject = wheeliams_render_placeholders($template['subject'], $vars);
         // nl2br the content text BEFORE substituting {ORDER_TABLE} so the table's own HTML isn't broken up.
         $html    = wheeliams_render_placeholders(nl2br($template['content']), $vars);
-
-        $attachments = $this->attachments($lines);
 
         return $this->brevo($to, $orderingName, $bcc, $subject, $html, $attachments);
     }
@@ -72,7 +73,8 @@ class Wheeliams_Order_Email
         }
         $orderingName = trim(($ordering['first_name'] ?? '').' '.($ordering['last_name'] ?? '')) ?: $po['supplierName'];
 
-        $vars = $this->vars($po, $lines, $orderingEmail);
+        // Lightweight (list-only) attachment check so the preview matches the sent email.
+        $vars = $this->vars($po, $lines, $orderingEmail, $this->hasAttachments($lines));
 
         $to = trim(wheeliams_render_placeholders($template['email_to'], $vars));
         if(!filter_var($to, FILTER_VALIDATE_EMAIL)) $to = $orderingEmail;
@@ -91,7 +93,7 @@ class Wheeliams_Order_Email
     }
 
     /* Placeholder values for a saved PO. */
-    protected function vars($po, $lines, $supplierEmail)
+    protected function vars($po, $lines, $supplierEmail, $hasAttachments = false)
     {
         $isPO = empty($po['is_enquiry']);
         return array(
@@ -104,6 +106,8 @@ class Wheeliams_Order_Email
             'COMPONENT_TYPE'  => $po['component_type'],
             'PROCESS_TYPE'    => $po['process_type'],
             'ORDER_TABLE'     => $this->orderTable($lines, (int)($po['supplierID'] ?? 0)),
+            // Flag for {IF_ATTACHMENTS}...{/IF_ATTACHMENTS} blocks in the template.
+            'HAS_ATTACHMENTS' => (bool)$hasAttachments,
         );
     }
 
@@ -208,6 +212,40 @@ class Wheeliams_Order_Email
             $out = array_merge($out, $this->listFilesRecursive($drive, $sub->getId()));
         }
         return $out;
+    }
+
+    /*
+     * Cheap check for whether ANY line's part has an attachable file in Drive —
+     * lists only (no downloads) and short-circuits on the first hit. Used to drive
+     * the {IF_ATTACHMENTS} note in the email without downloading everything.
+     */
+    protected function hasAttachments($lines)
+    {
+        try {
+            $drive = $this->driveService();
+        } catch (Exception $e) {
+            return false;
+        }
+        $seen = array();
+        foreach($lines as $l){
+            $code = $l['partCode'];
+            $type = wheeliams_drive_type_for($code, $l['type']);
+            if(isset($seen[$code.'|'.$type])) continue;
+            $seen[$code.'|'.$type] = true;
+            try {
+                $typeFolder = $this->findFolder($drive, $type, DRIVE_ROOT_FOLDER_ID);
+                if(!$typeFolder) continue;
+                $partFolder = $this->findFolder($drive, $code, $typeFolder);
+                if(!$partFolder) continue;
+                foreach($this->listFilesRecursive($drive, $partFolder) as $file){
+                    $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+                    if(in_array($ext, $this->attachExtensions, true)) return true;
+                }
+            } catch (Exception $e) {
+                continue;
+            }
+        }
+        return false;
     }
 
     /* Build Brevo attachment list [{name, content(base64)}] for the PO's parts. */

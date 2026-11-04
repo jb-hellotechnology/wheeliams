@@ -1949,6 +1949,14 @@ td.inline-form input[type=text]{
 	left:1em;
 }
 
+/* "Manage Stock" shortcut sits just above the fixed Back button, staying in
+   view while the component page scrolls. */
+.button.manage-stock{
+	position: fixed;
+	bottom:3.5em;
+	left:1em;
+}
+
 form.fixed-submit footer{
 	position: sticky;
 	backdrop-filter: blur(3px);
@@ -2047,4 +2055,32 @@ form.fixed-submit footer{
 }
 .file-manager .fm-icon-btn .material-symbols-outlined{
 	font-size:1.1rem;
+}
+
+/* BOM quick-import panel (wheeliams_bom_import_panel) */
+.bom-import .bi-input{
+	width:100%;
+	font-family:monospace;
+	font-size:0.85rem;
+}
+.bom-import .bi-mapping{
+	display:flex;
+	gap:1.25rem;
+	flex-wrap:wrap;
+	align-items:center;
+	margin:0.75rem 0;
+}
+.bom-import .bi-map-row{
+	display:inline-flex;
+	align-items:center;
+	gap:0.4rem;
+}
+.bom-import .bi-map-row select{
+	width:auto;
+}
+.bom-import tr.bi-error{
+	background:#fde8e8;
+}
+.bom-import tr.bi-error td{
+	color:#a11;
 }
