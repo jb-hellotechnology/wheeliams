@@ -106,9 +106,14 @@ class Wheeliams_Analysis extends PerchAPI_Factory
             }
         }
 
-        // --- 2. Check each component's OWN stock / reorder level ---
-        // Only components whose projected stock (after meeting demand) falls to or
-        // below their reorder level are ordered; order enough to refill to the max.
+        // --- 2. Check each component's OWN stock vs its MINIMUM level ---
+        // Policy (client decision 2026-11-05): "order up to the minimum". A part is
+        // reordered when its projected stock (after meeting demand) would fall below
+        // its minimum; we order just enough to bring it back up to the minimum, then
+        // batch-round. NOTE: the stored dynamicFields key is still the legacy
+        // 'maximum_stock_level' — it now HOLDS the minimum (the field was relabelled
+        // "Minimum Stock Level", values kept). The Reorder Quantity field is no
+        // longer used in this calculation.
         $collated = array(); // componentID => ['node'=>..., 'qt'=>float, 'used_on'=>[...]]
 
         foreach($need as $cid => $info){
@@ -117,15 +122,14 @@ class Wheeliams_Analysis extends PerchAPI_Factory
             $cdyn      = json_decode($comp['dynamicFields'], true) ?: array();
             $cstock    = $Stock->level($cid);
             $cplan     = $Stock->planned($cid);
-            $creorder  = (float)($cdyn['reorder_quantity'] ?? 0);
-            $cmax      = (float)($cdyn['maximum_stock_level'] ?? 0);
+            $cmin      = (float)($cdyn['maximum_stock_level'] ?? 0); // legacy key = Minimum Stock Level
             $cdemand   = (float)$info['qty'];
 
             $projected = $cstock + $cplan - $cdemand; // stock left after building the orders
 
-            if($projected > $creorder) continue;      // enough stock — no reorder needed
+            if($projected >= $cmin) continue;         // at/above the minimum — no reorder
 
-            $orderQty = $cmax - $projected;            // refill back up to the maximum
+            $orderQty = $cmin - $projected;            // bring stock back up to the minimum
             if($orderQty <= 0) continue;
 
             $collated[$cid] = array(

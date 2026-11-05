@@ -130,6 +130,20 @@
 			$data['values-part_status_code'] = $WheeliamsSettingsInput->setting_values('part-status-code', 'code', '');
 			$data['values-product_group_description'] = $WheeliamsSettingsInput->setting_values('product-group-description', 'description', '');
 			$data['values-vehicle'] = $WheeliamsSettingsInput->setting_values('vehicle-list', 'description', '');
+			// Keep any vehicles already stored on this component selectable even if
+			// they've since been renamed/removed from the vehicle list — otherwise they
+			// show in the list row but can't be shown selected in the dropdown (and
+			// would be silently dropped on the next save).
+			if(!empty($data['vehicle']) && is_array($data['vehicle'])){
+				$vehExisting = array_map('trim', explode(',', $data['values-vehicle']));
+				foreach($data['vehicle'] as $veh){
+					$veh = trim((string)$veh);
+					if($veh !== '' && !in_array($veh, $vehExisting, true)){
+						$data['values-vehicle'] .= ($data['values-vehicle'] !== '' ? ',' : '').$veh;
+						$vehExisting[] = $veh;
+					}
+				}
+			}
 			$data['values-process_type'] = $WheeliamsSettingsInput->setting_values('process-type', 'process_type', '');
 			$data['values-generic_material'] = $WheeliamsSettingsInput->setting_values('generic-material', 'material', '');
 			$data['values-unit_of_measure'] = $WheeliamsSettingsInput->setting_values('uom', 'unit', '');
@@ -509,9 +523,18 @@
 					$db = PerchDB::fetch();
 					$row = $db->get_row('SELECT * FROM perch3_wheeliams_components
 										 WHERE perch3_wheeliams_componentID='.(int)$_GET['id']);
-					
+
 					if ($row) {
-						unset($row['perch3_wheeliams_componentID']);
+						unset($row['perch3_wheeliams_componentID'], $row['timestamp']);
+						// A duplicated manufactured part gets its OWN new base number from the
+						// per-series counter — never a copy of the source's part number.
+						if (($row['type'] ?? '') === 'manufactured') {
+							$dyn = json_decode($row['dynamicFields'], true) ?: array();
+							if (!empty($dyn['part_no_prefix']) && isset($dyn['component_type'])) {
+								$number = wheeliams_consume_part_number($dyn['part_no_prefix'], $dyn['component_type']);
+								$row['partCode'] = strtoupper($dyn['part_no_prefix'].$dyn['component_type'].'-'.$number.'-'.($dyn['part_issue_code'] ?? ''));
+							}
+						}
 						$newID = $db->insert('perch3_wheeliams_components', $row);
 						PerchUtil::redirect('/components/?type='.urlencode($_GET['type']).'&edit=1&id='.$newID);
 					}
@@ -1252,7 +1275,7 @@
 			if($type=='manufactured'){
 				echo '<th>Description</th><th>Product Group</th><th>Product Short Code</th><th>Part Status</th><th>Vehicle</th><th>UOM</th>';
 			}elseif($type=='raw-materials'){
-				echo '<th>Mass/Unit Length (Kg)</th><th>UOM</th><th>Max Stock</th><th>Reorder Qty</th><th>Rounding Qty</th>';
+				echo '<th>Mass/Unit Length (Kg)</th><th>UOM</th><th>Min Stock</th><th>Reorder Qty</th><th>Rounding Qty</th>';
 			}
 			
 			echo '<th>Delete</th>';
@@ -2361,7 +2384,7 @@ GRAPHQL;
 		echo '<input type="hidden" name="run" value="'.(int)$runID.'">';
 		echo '<div class="table-container"><table class="datatable">';
 		echo '<thead class="first-row">';
-		echo '<th>Supplier</th><th>Part Code</th><th>Description</th><th>Used On</th><th>Type</th><th>Process</th><th title="Qty needed to build the open orders">Demand</th><th title="Stock on hand when the analysis ran">In Stock</th><th title="Suggested order to refill stock to the maximum level">Order Qty</th><th>UOM</th><th>Order Qty (AQ)</th>';
+		echo '<th>Supplier</th><th>Part Code</th><th>Description</th><th>Used On</th><th>Type</th><th>Process</th><th title="Qty needed to build the open orders">Demand</th><th title="Stock on hand when the analysis ran">In Stock</th><th title="Suggested order to bring stock up to the minimum level">Order Qty</th><th>UOM</th><th>Order Qty (AQ)</th>';
 		echo '</thead><tbody>';
 		foreach($lines as $line){
 			echo '<tr>';
