@@ -85,11 +85,12 @@ class Wheeliams_Components extends PerchAPI_Factory
 
 	}
 
-	/* Add the per-supplier part-code / UOM columns to the component↔supplier link. */
+	/* Add the per-supplier part-code / UOM / link columns to the component↔supplier link. */
 	protected function ensureComponentSupplierColumns(){
 		foreach(array(
 			'supplier_part_code' => 'VARCHAR(191) DEFAULT NULL',
 			'supplier_uom'       => 'VARCHAR(64) DEFAULT NULL',
+			'supplier_link'      => 'VARCHAR(512) DEFAULT NULL',
 		) as $col => $def){
 			$exists = $this->db->get_row("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='perch3_wheeliams_components_suppliers' AND COLUMN_NAME='".$col."'");
 			if(!$exists){
@@ -98,24 +99,47 @@ class Wheeliams_Components extends PerchAPI_Factory
 		}
 	}
 
-	/* Save the supplier's own part code & UOM for this component. */
-	public function setSupplierDetails($componentID, $supplierID, $partCode, $uom){
+	/* Save the supplier's own part code, UOM & product link for this component. */
+	public function setSupplierDetails($componentID, $supplierID, $partCode, $uom, $link=''){
 		$this->ensureComponentSupplierColumns();
 		$componentID = (int)$componentID;
 		$supplierID  = (int)$supplierID;
 		$sql = 'UPDATE perch3_wheeliams_components_suppliers SET supplier_part_code='.$this->db->pdb((string)$partCode)
 			 . ', supplier_uom='.$this->db->pdb((string)$uom)
+			 . ', supplier_link='.$this->db->pdb((string)$link)
 			 . ' WHERE perch3_wheeliams_componentID='.$componentID.' AND wheeliams_supplierID='.$supplierID;
 		$this->db->execute($sql);
 	}
 
-	/* The supplier's part code & UOM for this component (empty strings if unset). */
+	/* The supplier's part code, UOM & product link for this component (empty strings if unset). */
 	public function supplierDetails($componentID, $supplierID){
+		$this->ensureComponentSupplierColumns();
 		$row = $this->db->get_row('SELECT * FROM perch3_wheeliams_components_suppliers WHERE perch3_wheeliams_componentID='.(int)$componentID.' AND wheeliams_supplierID='.(int)$supplierID.' LIMIT 1');
 		return array(
 			'supplier_part_code' => $row['supplier_part_code'] ?? '',
 			'supplier_uom'       => $row['supplier_uom'] ?? '',
+			'supplier_link'      => $row['supplier_link'] ?? '',
 		);
+	}
+
+	/* All recorded price points for a component+supplier, newest first (for edit/delete). */
+	public function componentPrices($componentID, $supplierID){
+		$sql = 'SELECT * FROM perch3_wheeliams_components_suppliers_price WHERE componentID='.(int)$componentID.' AND supplierID='.(int)$supplierID
+			 . ' ORDER BY COALESCE(cost_date, DATE(timestamp)) DESC, wheeliams_components_suppliers_priceID DESC';
+		return $this->db->get_rows($sql);
+	}
+
+	/* Correct a single price point (fix a mistyped cost or date). */
+	public function updatePrice($priceID, $price, $costDate=null){
+		$costDate = ($costDate && strtotime($costDate)) ? date('Y-m-d', strtotime($costDate)) : date('Y-m-d');
+		$sql = 'UPDATE perch3_wheeliams_components_suppliers_price SET price='.$this->db->pdb($price).', cost_date='.$this->db->pdb($costDate)
+			 . ' WHERE wheeliams_components_suppliers_priceID='.(int)$priceID;
+		return $this->db->execute($sql);
+	}
+
+	/* Remove a single price point entered in error. */
+	public function deletePrice($priceID){
+		return $this->db->execute('DELETE FROM perch3_wheeliams_components_suppliers_price WHERE wheeliams_components_suppliers_priceID='.(int)$priceID);
 	}
 	
 	public function componentPrice($componentID,$supplierID,$price,$costDate=null){

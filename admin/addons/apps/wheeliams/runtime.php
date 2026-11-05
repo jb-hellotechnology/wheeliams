@@ -611,10 +611,28 @@
 					if($newPr !== '' && (float)$newPr != (float)$curPr){
 						$WheeliamsComponents->componentPrice($_GET['id'], $supID, $newPr, $SubmittedForm->data['cost_date'] ?? null);
 					}
-					$WheeliamsComponents->setSupplierDetails($_GET['id'], $supID, $SubmittedForm->data['supplier_part_code'] ?? '', $SubmittedForm->data['supplier_uom'] ?? '');
+					$WheeliamsComponents->setSupplierDetails($_GET['id'], $supID, $SubmittedForm->data['supplier_part_code'] ?? '', $SubmittedForm->data['supplier_uom'] ?? '', $SubmittedForm->data['supplier_link'] ?? '');
 					// The price form is rendered once per supplier; clear these POST values so they
 					// don't repopulate (and overwrite) the other suppliers' fields on re-render.
-					unset($_POST['price'], $_POST['cost_date'], $_POST['supplier_part_code'], $_POST['supplier_uom']);
+					unset($_POST['price'], $_POST['cost_date'], $_POST['supplier_part_code'], $_POST['supplier_uom'], $_POST['supplier_link']);
+				break;
+
+				case 'price_edit':
+					// Correct a single recorded price point (cost + date).
+					$WheeliamsComponents = new Wheeliams_Components($API);
+					$priceID = (int)($SubmittedForm->data['wheeliams_components_suppliers_priceID'] ?? 0);
+					if($priceID && ($SubmittedForm->data['price'] ?? '') !== ''){
+						$WheeliamsComponents->updatePrice($priceID, $SubmittedForm->data['price'], $SubmittedForm->data['cost_date'] ?? null);
+					}
+					unset($_POST['price'], $_POST['cost_date'], $_POST['wheeliams_components_suppliers_priceID']);
+				break;
+
+				case 'price_delete':
+					// Remove a single price point entered in error.
+					$WheeliamsComponents = new Wheeliams_Components($API);
+					$priceID = (int)($SubmittedForm->data['wheeliams_components_suppliers_priceID'] ?? 0);
+					if($priceID){ $WheeliamsComponents->deletePrice($priceID); }
+					unset($_POST['wheeliams_components_suppliers_priceID']);
 				break;
 				
 				case 'component_supplier_remove':
@@ -1380,9 +1398,13 @@
 		
 		$Components = new Wheeliams_Components();
 		$Suppliers = new Wheeliams_suppliers();
-		
+
 		$suppliers = $Components->componentSuppliers($id);
-		
+
+		// UOM options for the supplier-UOM dropdown (standard list; defaults to EA).
+		$SettingsInput = new Wheeliams_Settings_Inputs();
+		$uomOptions    = $SettingsInput->setting_values('uom', 'unit', '');
+
 		echo '<section>';
 		echo '<header>';
 		echo '<h2>Existing Suppliers</h2>';
@@ -1443,14 +1465,47 @@
 				}
 			  });
 			</script>";
-			PerchSystem::set_var('wheeliams_supplierID', $supplier['wheeliams_supplierID']);
+			$supID = $supplier['wheeliams_supplierID'];
+			$sdet  = $Components->supplierDetails($id, $supID);
+
+			PerchSystem::set_var('wheeliams_supplierID', $supID);
 			PerchSystem::set_var('latestPrice', $latestPrice['price']);
-			PerchSystem::set_var('price', $Components->getComponentPrice($id,$supplier['wheeliams_supplierID']));
+			PerchSystem::set_var('price', $Components->getComponentPrice($id,$supID));
 			PerchSystem::set_var('cost_date', date('Y-m-d')); // default the cost date to today
-			$sdet = $Components->supplierDetails($id, $supplier['wheeliams_supplierID']);
 			PerchSystem::set_var('supplier_part_code', $sdet['supplier_part_code']);
-			PerchSystem::set_var('supplier_uom', $sdet['supplier_uom']);
+			PerchSystem::set_var('supplier_uom', $sdet['supplier_uom'] !== '' ? $sdet['supplier_uom'] : 'EA'); // default EA
+			PerchSystem::set_var('supplier_link', $sdet['supplier_link']);
+			PerchSystem::set_var('values-supplier_uom', $uomOptions);
 			wheeliams_form('component_supplier_price.html');
+
+			// Active link to this component on the supplier's own website, when set.
+			if(!empty($sdet['supplier_link'])){
+				echo '<p><a href="'.htmlspecialchars($sdet['supplier_link']).'" target="_blank" rel="noopener">View on supplier&rsquo;s site &#8599;</a></p>';
+			}
+
+			// Price history with per-row correct / delete (fix a mistyped cost or date).
+			$prices = $Components->componentPrices($id, $supID);
+			if($prices){
+				echo '<details class="price-history"><summary>Price history ('.count($prices).')</summary>';
+				echo '<table class="compact"><tr class="first-row"><th>Date</th><th>Price</th><th>Correct</th><th></th></tr>';
+				foreach($prices as $p){
+					$pid   = $p['wheeliams_components_suppliers_priceID'];
+					$pdate = !empty($p['cost_date']) ? $p['cost_date'] : explode(' ', $p['timestamp'])[0];
+					echo '<tr><td>'.htmlspecialchars(date('d/m/y', strtotime($pdate))).'</td>';
+					echo '<td>&pound;'.number_format((float)$p['price'], 2).'</td>';
+					echo '<td>';
+					PerchSystem::set_var('wheeliams_components_suppliers_priceID', $pid);
+					PerchSystem::set_var('price', $p['price']);
+					PerchSystem::set_var('cost_date', $pdate);
+					wheeliams_form('price_edit.html');
+					echo '</td><td>';
+					PerchSystem::set_var('wheeliams_components_suppliers_priceID', $pid);
+					wheeliams_form('price_delete.html');
+					echo '</td></tr>';
+				}
+				echo '</table></details>';
+			}
+
 			echo '<footer>';
 			wheeliams_form('component_supplier_current.html');
 			wheeliams_form('component_supplier_remove.html');

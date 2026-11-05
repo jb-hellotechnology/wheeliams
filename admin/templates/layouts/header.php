@@ -122,7 +122,10 @@
 				var html = '';
 				order.forEach(function (c) {
 					if (!groups[c]) return;
-					html += '<section class="fm-section flow"><h3>' + escapeHtml(c) + '</h3><ul class="file-list">';
+					// Flag folders that aren't in this part's standard area list — usually
+					// legacy/renamed folders to reconcile during the Drive cleanup.
+					var tag = (CATS.indexOf(c) === -1) ? ' <span class="fm-nonstandard">(not a standard folder)</span>' : '';
+					html += '<section class="fm-section flow"><h3>' + escapeHtml(c) + tag + '</h3><ul class="file-list">';
 					groups[c].forEach(function (f) { html += fileRow(f, false); });
 					html += '</ul></section>';
 				});

@@ -2056,6 +2056,36 @@ form.fixed-submit footer{
 .file-manager .fm-icon-btn .material-symbols-outlined{
 	font-size:1.1rem;
 }
+.file-manager .fm-nonstandard{
+	font-size:0.8rem;
+	font-weight:normal;
+	color:#b06a00;
+}
+
+/* Supplier price history (correct / delete a price point) */
+.price-history{
+	margin-top:0.75rem;
+}
+.price-history summary{
+	cursor:pointer;
+	font-size:0.85rem;
+}
+.price-history table{
+	width:100%;
+	font-size:0.85rem;
+}
+.price-history .price-edit-form{
+	display:flex;
+	gap:0.25rem;
+	align-items:center;
+	margin:0;
+}
+.price-history .price-edit-form input[type=text]{
+	max-width:70px;
+}
+.price-history .price-edit-form input[type=date]{
+	max-width:130px;
+}
 
 /* BOM quick-import panel (wheeliams_bom_import_panel) */
 .bom-import .bi-input{

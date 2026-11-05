@@ -13,8 +13,12 @@
 			<perch:input type="text" id="supplier_part_code" value="<perch:form id="supplier_part_code">
 		</div>
 		<div>
+			<perch:label for="supplier_link">Supplier Link</perch:label>
+			<perch:input type="url" id="supplier_link" value="<perch:form id="supplier_link">" placeholder="https://…" />
+		</div>
+		<div>
 			<perch:label for="supplier_uom">Supplier UOM</perch:label>
-			<perch:input type="text" id="supplier_uom" value="<perch:form id="supplier_uom">
+			<perch:input type="select" id="supplier_uom" options="<perch:forms id="values-supplier_uom">" />
 		</div>
 		<perch:success>
 			<p class="alert success">Price updated | <a href="/components/?type=<perch:forms id="type" />&edit=1&id=<perch:forms id="perch3_wheeliams_componentID" />">Continue</a></p>
