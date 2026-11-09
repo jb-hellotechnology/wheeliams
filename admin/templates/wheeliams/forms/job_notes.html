@@ -1,0 +1,16 @@
+<perch:form id="job_notes" app="wheeliams" method="post" class="flow">
+
+	<div>
+		<perch:label for="notes">Job Notes</perch:label>
+		<perch:input type="textarea" id="notes" rows="5" />
+		<small class="help">Queries or information about this job / order. Visible to all staff.</small>
+	</div>
+
+	<perch:success>
+		<p class="alert success">Notes saved.</p>
+	</perch:success>
+
+	<perch:input type="submit" value="Save Notes" class="button primary" />
+	<perch:input type="hidden" id="jobID" />
+
+</perch:form>

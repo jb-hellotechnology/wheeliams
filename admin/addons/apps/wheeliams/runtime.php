@@ -623,6 +623,15 @@
 					$WheeliamsComponents = new Wheeliams_Components($API);
 					$WheeliamsComponents->assignSupplier($_GET['id'],$SubmittedForm->data['wheeliams_supplierID']);
 				break;
+
+				case 'job_notes':
+					// Any logged-in staff member may record notes against a job.
+					$Session = PerchMembers_Session::fetch();
+					$jobID   = (int)($SubmittedForm->data['jobID'] ?? 0);
+					if($jobID){
+						wheeliams_job_note_save($jobID, $SubmittedForm->data['notes'] ?? '', $Session->get('memberID'));
+					}
+				break;
 				
 				case 'component_supplier_price':
 					$WheeliamsComponents = new Wheeliams_Components($API);
@@ -2190,15 +2199,21 @@ JS;
 		// Top line: the component itself with its own assigned cost, so the total includes
 		// it and you can see at a glance whether the component has a cost of its own.
 		echo '<tr class="bom-self first-line">';
-		$selfUrl = wheeliams_part_edit_url($componentID, $tree['type']);
-		echo '<td><strong><a href="'.$selfUrl.'">'.htmlspecialchars($tree['partCode']).'</a></strong></td>';
+		if($editable){
+			// On the editable BOM, link the item itself back to its component entry.
+			$selfUrl = wheeliams_part_edit_url($componentID, $tree['type']);
+			echo '<td><strong><a href="'.$selfUrl.'">'.htmlspecialchars($tree['partCode']).'</a></strong></td>';
+		}else{
+			// Read-only (Job Details): the top row IS the current job — no self link.
+			echo '<td><strong>'.htmlspecialchars($tree['partCode']).'</strong></td>';
+		}
 		echo '<td>'.htmlspecialchars($tree['description']).'</td>';
 		echo '<td>'.wheeliams_num($tree['extended_qty']).'</td>';
 		echo '<td>'.htmlspecialchars($tree['uom']).'</td>';
 		echo '<td>'.htmlspecialchars($tree['generic_material']).'</td>';
 		if($canCost){
 			echo '<td>'.htmlspecialchars($tree['supplierName']).'</td>';
-			echo '<td>'.((float)$tree['unit_cost'] ? '£'.number_format($tree['unit_cost'], 2) : '<span class="alert warning">no cost</span>').'</td>';
+			echo '<td>'.((float)$tree['unit_cost'] ? '£'.number_format($tree['unit_cost'], 2) : 'no cost').'</td>';
 			echo '<td>'.((float)$tree['line_cost'] ? '£'.number_format($tree['line_cost'], 2) : '').'</td>';
 		}
 		if($showFiles){ echo '<td class="no-print"></td>'; }
@@ -2228,12 +2243,10 @@ JS;
 		$depth  = max(0, (int)$node['level'] - 1); // level 1 = direct BOM line = no indent
 		$indent = str_repeat('&nbsp;&nbsp;&nbsp;&nbsp;', $depth);
 		echo '<tr class="bom-level-'.$depth.'">';
-		if($editable){
-			$clink = '/components/?type='.htmlspecialchars((string)$node['type']).'&edit=1&id='.(int)$node['componentID'];
-			echo '<td>'.$indent.'<a href="'.$clink.'">'.htmlspecialchars($node['partCode']).'</a></td>';
-		}else{
-			echo '<td>'.$indent.htmlspecialchars($node['partCode']).'</td>';
-		}
+		// Link each part code to its component page — the same on the editable BOM
+		// and the read-only Job Details view.
+		$clink = '/components/?type='.htmlspecialchars((string)$node['type']).'&edit=1&id='.(int)$node['componentID'];
+		echo '<td>'.$indent.'<a href="'.$clink.'">'.htmlspecialchars($node['partCode']).'</a></td>';
 		echo '<td>'.htmlspecialchars($node['description']).'</td>';
 		echo '<td>'.wheeliams_num($node['extended_qty']).'</td>';
 		echo '<td>'.htmlspecialchars($node['uom']).'</td>';
@@ -2432,6 +2445,40 @@ GRAPHQL;
 			$text = str_replace('{'.$k.'}', $v, $text);
 		}
 		return $text;
+	}
+
+	/* ---------------------------------------------------------------------
+	 * Job notes — free-text staff notes per job (keyed by the job's
+	 * componentID), shown on the read-only /job/ page. Any logged-in staff
+	 * member can record queries / information about a job.
+	 * ------------------------------------------------------------------- */
+	function wheeliams_job_notes_install(){
+		$db = PerchDB::fetch();
+		$db->execute("CREATE TABLE IF NOT EXISTS perch3_wheeliams_job_notes (
+			jobID INT UNSIGNED NOT NULL,
+			notes TEXT,
+			updated_at DATETIME DEFAULT NULL,
+			updated_by INT UNSIGNED DEFAULT NULL,
+			PRIMARY KEY (jobID)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+	}
+
+	function wheeliams_job_note($jobID){
+		wheeliams_job_notes_install();
+		$db = PerchDB::fetch();
+		return $db->get_row('SELECT * FROM perch3_wheeliams_job_notes WHERE jobID='.(int)$jobID);
+	}
+
+	function wheeliams_job_note_save($jobID, $notes, $memberID){
+		wheeliams_job_notes_install();
+		$db    = PerchDB::fetch();
+		$jobID = (int)$jobID;
+		$now   = date('Y-m-d H:i:s');
+		if($db->get_row('SELECT jobID FROM perch3_wheeliams_job_notes WHERE jobID='.$jobID)){
+			$db->update('perch3_wheeliams_job_notes', array('notes' => $notes, 'updated_at' => $now, 'updated_by' => (int)$memberID), 'jobID', $jobID);
+		}else{
+			$db->insert('perch3_wheeliams_job_notes', array('jobID' => $jobID, 'notes' => $notes, 'updated_at' => $now, 'updated_by' => (int)$memberID));
+		}
 	}
 
 	/* Sequential PO / enquiry numbers (0001-9999, never reset). */

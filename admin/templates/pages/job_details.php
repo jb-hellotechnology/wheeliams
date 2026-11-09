@@ -19,23 +19,31 @@ if(!$component){
 }else{
 	$dyn       = json_decode($component['dynamicFields'], true) ?: array();
 	$code      = $component['partCode'];
-	$driveType = wheeliams_drive_type_for($code, $component['type']);
 
 	echo '<p class="no-print"><a href="/" class="button back">&larr; Dashboard</a> ';
 	echo '</p>';
 
-	echo '<h1>'.htmlspecialchars($code).' &mdash; '.htmlspecialchars($dyn['part_description'] ?? '').'</h1>';
+	// Admins can jump straight to the BOM editor by clicking the product code.
+	$bomType = perch_member_has_tag('admin') ? wheeliams_bom_type_for_partcode($code) : '';
+	$codeHtml = $bomType
+		? '<a href="/boms/?type='.$bomType.'&edit=1&id='.$id.'">'.htmlspecialchars($code).'</a>'
+		: htmlspecialchars($code);
+	echo '<h1>'.$codeHtml.' &mdash; '.htmlspecialchars($dyn['part_description'] ?? '').'</h1>';
 
 	echo '<h2>Bill of Materials</h2>';
 	wheeliams_bom_explosion_table($id, false, null, true); // read-only, with per-row Files
 
-	echo '<h2>Documents</h2>';
-	echo '<div id="job-docs" data-code="'.htmlspecialchars($code, ENT_QUOTES).'" data-type="'.htmlspecialchars($driveType, ENT_QUOTES).'">Loading documents&hellip;</div>';
-	
-	if(perch_member_has_tag('admin')){
-		$bt = wheeliams_bom_type_for_partcode($code);
-		if($bt){ echo '<a class="button" href="/boms/?type='.$bt.'&edit=1&id='.$id.'">Edit BOM</a>'; }
+	// Job notes — any staff member can record queries / information about this job.
+	// (Documents removed — every part's files are reached via the per-row Files modal.)
+	echo '<h2>Notes</h2>';
+	$jobNote = wheeliams_job_note($id);
+	PerchSystem::set_var('jobID', $id);
+	PerchSystem::set_var('notes', $jobNote['notes'] ?? '');
+	wheeliams_form('job_notes.html');
+	if($jobNote && !empty($jobNote['updated_at'])){
+		echo '<p class="muted"><small>Last updated '.htmlspecialchars(date('d/m/y H:i', strtotime($jobNote['updated_at']))).'</small></p>';
 	}
+
 
 	echo <<<'JS'
 <style>
@@ -55,34 +63,6 @@ if(!$component){
 	</div>
 </div>
 <script>
-// Top-level Documents section (loaded into the page).
-(function(){
-	function render(container, files){
-		if(!files || !files.length){ container.innerHTML = '<p>No documents found.</p>'; return; }
-		var groups = {};
-		files.forEach(function(f){
-			var cat = f.path || 'General Documents';
-			(groups[cat] = groups[cat] || []).push(f);
-		});
-		var html = '';
-		Object.keys(groups).sort().forEach(function(cat){
-			html += '<section class="doc-group flow"><h3>' + cat + '</h3><ul>';
-			groups[cat].forEach(function(f){
-				html += '<li><a href="' + f.webViewLink + '" target="_blank" rel="noopener">' + f.name + '</a></li>';
-			});
-			html += '</ul></section>';
-		});
-		container.innerHTML = html;
-	}
-	var docs = document.getElementById('job-docs');
-	if(docs){
-		var url = '/drive_files.php?productCode=' + encodeURIComponent(docs.dataset.code) + '&type=' + encodeURIComponent(docs.dataset.type);
-		fetch(url).then(function(r){ return r.json(); })
-			.then(function(d){ if(d.error){ docs.innerHTML = d.error; } else { render(docs, d.files); } })
-			.catch(function(){ docs.innerHTML = 'Error loading documents.'; });
-	}
-})();
-
 function wheeliamsFilesModalClose(){ document.getElementById('filesModal').classList.remove('open'); }
 
 // Per-BOM-row "Files" button — opens the drawings in a modal.
