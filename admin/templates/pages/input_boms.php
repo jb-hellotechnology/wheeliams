@@ -26,10 +26,31 @@ perch_layout('header');
 				echo "<h1>Kit BOMs</h1>";
 			}
 		}
-		
+
+		// Tabs on the edit view: BOM / Cutting & Rolling (tubes) / Workshop Notes.
+		$crTab = 'bom';
+		if($_GET['edit'] && ($_GET['tab'] ?? '') === 'cutting') $crTab = 'cutting';
+		elseif($_GET['edit'] && ($_GET['tab'] ?? '') === 'notes') $crTab = 'notes';
+		if($_GET['edit'] && !empty($_GET['id'])){
+			$base = '/boms/?type='.htmlspecialchars($_GET['type']).'&edit=1&id='.(int)$_GET['id'];
+			echo '<nav class="bom-tabs">';
+			echo '<a class="'.($crTab==='bom'?'active':'').'" href="'.$base.'">'.($type==='manufactured'?'Component BOM':'Kit BOM').'</a>';
+			echo '<a class="'.($crTab==='cutting'?'active':'').'" href="'.$base.'&tab=cutting">Cutting &amp; Rolling</a>';
+			echo '<a class="'.($crTab==='notes'?'active':'').'" href="'.$base.'&tab=notes">Workshop Notes</a>';
+			echo '</nav>';
+		}
+
 		if(!$_GET['edit']){
 			/* TABLE OF ITEMS */
 			wheeliams_bom_table($type);
+		}elseif($crTab === 'cutting'){
+			if(!empty($_GET['id'])){
+				wheeliams_cutting_rolling_panel((int)$_GET['id'], $type);
+			}
+		}elseif($crTab === 'notes'){
+			if(!empty($_GET['id'])){
+				wheeliams_workshop_notes_panel((int)$_GET['id'], $componentData['partCode'], $type);
+			}
 		}else{
 			if(!empty($_GET['id'])){
 				/* Multilevel BOM with Edit/Delete on this product's direct lines */
@@ -47,17 +68,19 @@ perch_layout('header');
 		/* ADD NEW ITEM OF TYPE */
 		
 		/* LIST ITEMS OF TYPE WITH EDIT/DELETE OPTIONS */
-		if($_GET['edit']){
+		if($_GET['edit'] && $crTab === 'bom'){
 			/* FILES */
 			// Order the ASSIGN areas by likely use: Components, then Fasteners, then Raw Materials.
 			if($_GET['type']=='products'){
 				wheeliams_form('bom_components.html');
 				wheeliams_form('bom_fasteners.html');
 				wheeliams_form('bom_raw-materials.html');
+				wheeliams_form('bom_tubes.html');
 			}else{
-				// Components can take fasteners as well as raw materials; both roll into cost.
+				// Components can take fasteners, raw materials and tubes; all roll into cost.
 				wheeliams_form('bom_fasteners.html');
 				wheeliams_form('bom_raw-materials.html');
+				wheeliams_form('bom_tubes.html');
 			}
 			echo '</div>';
 			echo '<div>';

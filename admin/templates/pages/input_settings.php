@@ -8,6 +8,7 @@ perch_layout('header');
 <main class="full">
 	<?php
 	if($_GET['type']){
+		if($_GET['type'] === 'tube-description'){ wheeliams_seed_tube_descriptions(); } // first-visit seed
 		echo "<h1>".ucwords(str_replace("-", " ", $_GET['type']))."</h1>";
 		if($_GET['delete'] && $_GET['id']){
 			/* DELETE ITEM */
@@ -80,6 +81,9 @@ perch_layout('header');
 		</div>
 		<div class="option-card">
 			<h2><a href="/settings/input-parameters?type=generic-material">Generic Material</a></h2>
+		</div>
+		<div class="option-card">
+			<h2><a href="/settings/input-parameters?type=tube-description">Tube Descriptions</a></h2>
 		</div>
 		<div class="option-card">
 			<h2><a href="/settings/input-parameters?type=supplier-email-template">Supplier Email Template</a></h2>

@@ -1,0 +1,16 @@
+<perch:form id="workshop_notes" app="wheeliams" method="post" class="flow">
+
+	<div>
+		<perch:label for="notes">Workshop Notes</perch:label>
+		<perch:input type="textarea" id="notes" rows="6" />
+		<small class="help">Production queries, cut/roll adjustments, or any information for the workshop.</small>
+	</div>
+
+	<perch:success>
+		<p class="alert success">Notes saved.</p>
+	</perch:success>
+
+	<perch:input type="submit" value="Save Notes" class="button primary" />
+	<perch:input type="hidden" id="bomID" />
+
+</perch:form>

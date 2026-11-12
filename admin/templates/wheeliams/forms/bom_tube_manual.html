@@ -1,0 +1,69 @@
+<perch:form id="bom_tube_manual" app="wheeliams" method="post" class="flow cr-manual-form">
+
+	<div>
+		<perch:label for="is_rolled">Rolled or straight?</perch:label>
+		<perch:input type="select" id="is_rolled" options="STRAIGHT,ROLLED" />
+	</div>
+	<div>
+		<perch:label for="tube_description">Description</perch:label>
+		<perch:input type="select" id="tube_description" options="<perch:forms id="values-tube_description" />" required />
+	</div>
+	<div>
+		<perch:label for="section">Section</perch:label>
+		<perch:input type="text" id="section" required />
+	</div>
+	<div>
+		<perch:label for="size">Size</perch:label>
+		<perch:input type="text" id="size" required />
+	</div>
+	<div>
+		<perch:label for="material">Material (Grade)</perch:label>
+		<perch:input type="select" id="material" options="<perch:forms id="values-tube_material" />" required />
+	</div>
+	<div class="tube-rolled-only">
+		<perch:label for="seam_orientation">Seam Orientation</perch:label>
+		<perch:input type="select" id="seam_orientation" options="ANY,UP,DOWN" />
+	</div>
+
+	<fieldset class="tube-rolled-only">
+		<legend>Bend 1</legend>
+		<div><perch:label for="bend1_angle">Angle (&deg;)</perch:label><perch:input type="number" id="bend1_angle" step="any" min="0" /></div>
+		<div><perch:label for="bend1_radius">Radius (mm)</perch:label><perch:input type="number" id="bend1_radius" step="any" min="0" /></div>
+		<div><perch:label for="bend1_distance">Distance to bend 1 (mm)</perch:label><perch:input type="number" id="bend1_distance" step="any" min="0" /></div>
+		<div><perch:label for="bend1_springback">Spring back (mm)</perch:label><perch:input type="number" id="bend1_springback" step="any" min="0" /></div>
+	</fieldset>
+	<fieldset class="tube-rolled-only">
+		<legend>Bend 2 (optional)</legend>
+		<div><perch:label for="bend2_angle">Angle (&deg;)</perch:label><perch:input type="number" id="bend2_angle" step="any" min="0" /></div>
+		<div><perch:label for="bend2_radius">Radius (mm)</perch:label><perch:input type="number" id="bend2_radius" step="any" min="0" /></div>
+		<div><perch:label for="bend2_distance">Distance to bend 2 (mm)</perch:label><perch:input type="number" id="bend2_distance" step="any" min="0" /></div>
+		<div><perch:label for="bend2_springback">Spring back (mm)</perch:label><perch:input type="number" id="bend2_springback" step="any" min="0" /></div>
+	</fieldset>
+
+	<div>
+		<perch:label for="length">Length (mm)</perch:label>
+		<perch:input type="number" id="length" step="any" min="0" />
+	</div>
+	<div>
+		<perch:label for="quantity_t">Quantity</perch:label>
+		<perch:input type="number" id="quantity_t" step="any" min="0" />
+	</div>
+
+	<perch:input type="submit" value="Add manual tube" class="button primary" />
+	<perch:input type="hidden" id="type" value="tube" />
+
+</perch:form>
+
+<script>
+(function(){
+	var form = document.querySelector('.cr-manual-form');
+	if(!form) return;
+	var sel = form.querySelector('[id$="is_rolled"]');
+	if(!sel) return;
+	function sync(){
+		var rolled = sel.value === 'ROLLED';
+		form.querySelectorAll('.tube-rolled-only').forEach(function(el){ el.style.display = rolled ? '' : 'none'; });
+	}
+	sel.addEventListener('change', sync); sync();
+})();
+</script>

@@ -119,6 +119,9 @@ class Wheeliams_Analysis extends PerchAPI_Factory
         foreach($need as $cid => $info){
             $comp = $Components->component($cid);
             if(!$comp) continue;
+            // Tubes are made in-house from raw material — never ordered directly. Their
+            // steel rolls up into the material's demand (handled in a later stage).
+            if(($comp['type'] ?? '') === 'tube') continue;
             $cdyn      = json_decode($comp['dynamicFields'], true) ?: array();
             $cstock    = $Stock->level($cid);
             $cplan     = $Stock->planned($cid);
@@ -149,18 +152,31 @@ class Wheeliams_Analysis extends PerchAPI_Factory
         ));
         $runID = (int)$run->perch3_wheeliams_analysis_runID();
 
-        // Save one batch-rounded reorder line per collated component.
+        // Save one reorder line per collated component.
         foreach($collated as $cid => $c){
             $node = $c['node'];
-            $qt   = $c['qt'];
-            $aq   = wheeliams_batch_round($qt, (float)($node['batch_rounding'] ?? 0));
+            $qt   = $c['qt'];   // order quantity in the component's usage units
+            $uom  = $node['uom'];
+
+            if($node['type'] === 'raw-materials'){
+                // Raw materials are used by the mm but ordered in whole stock lengths:
+                //   lengths = ceil(order mm ÷ stock length).  (Client 10/11.)
+                $stockLen = (float)($node['stock_length'] ?? 0);
+                if($stockLen > 0){
+                    $qt  = ceil($qt / $stockLen);
+                    $uom = 'Length';
+                }
+                $aq = $qt; // whole lengths — no batch rounding
+            }else{
+                $aq = wheeliams_batch_round($qt, (float)($node['batch_rounding'] ?? 0));
+            }
 
             $this->db->insert($this->lines_table, array(
                 'runID'        => $runID,
                 'componentID'  => (int)$cid,
                 'partCode'     => $node['partCode'],
                 'description'  => $node['description'],
-                'uom'          => $node['uom'],
+                'uom'          => $uom,
                 'type'         => $node['type'],
                 'process_type' => $node['process_type'],
                 'supplierID'   => (int)$node['supplierID'],

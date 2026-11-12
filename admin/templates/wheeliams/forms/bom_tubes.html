@@ -1,0 +1,35 @@
+<section>
+<perch:form id="bom_manufactured_add" app="wheeliams" method="post" class="flow">
+
+	<header>
+		<h2>Assign Tube</h2>
+	</header>
+
+	<article>
+		<div>
+			<perch:label for="component">Tube</perch:label>
+			<perch:input type="select" id="component" class="select-2" options="<perch:forms id="values-tubes" />" />
+		</div>
+		<div>
+			<perch:label for="tube_length">Length (mm) <small>— rolled tubes only</small></perch:label>
+			<perch:input type="number" id="tube_length" min="0" step="any" />
+		</div>
+		<div>
+			<perch:label for="quantity_t">Quantity</perch:label>
+			<perch:input type="number" id="quantity_t" min="0" step="any" />
+		</div>
+
+		<perch:success>
+			<p class="alert success">Success | <a href="/boms/?type=<perch:forms id="type" />&edit=1&id=<perch:forms id="itemID" />">Add another</a></p>
+		</perch:success>
+	</article>
+
+	<footer>
+		<perch:input type="submit" value="Assign Tube" class="button primary" />
+	</footer>
+
+	<perch:input type="hidden" id="wheeliams_bomID" value="<perch:forms id="itemID" />" />
+	<perch:input type="hidden" id="type" value="tube" />
+
+</perch:form>
+</section>

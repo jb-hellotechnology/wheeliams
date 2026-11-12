@@ -98,7 +98,8 @@
 				var icon = getFileIcon(f.mimeType || '');
 				var actions = '';
 				if (/\.pdf$/i.test(f.name)) {
-					actions += '<a href="/drive_download.php?id=' + id + '&inline=1" target="_blank" rel="noopener" class="button small subtle fm-icon-btn" title="View" aria-label="View">' + fmIcon('visibility') + '</a> ';
+					// View opens an in-window PDF viewer; the href is a new-tab fallback.
+					actions += '<a href="/drive_download.php?id=' + id + '&inline=1" target="_blank" rel="noopener" class="button small subtle fm-icon-btn fm-view" data-id="' + escapeHtml(f.id) + '" data-name="' + escapeHtml(f.name) + '" title="View" aria-label="View">' + fmIcon('visibility') + '</a> ';
 				}
 				actions += '<a href="/drive_download.php?id=' + id + '" download="' + escapeHtml(f.name) + '" class="button small subtle fm-icon-btn" title="Download" aria-label="Download">' + fmIcon('download') + '</a>';
 				if (canEdit) {
@@ -204,10 +205,14 @@
 
 			root.addEventListener('click', function (e) {
 				// closest() so a click on the icon <span> inside a button still matches.
+				var viewBtn    = e.target.closest ? e.target.closest('.fm-view') : null;
 				var archiveBtn = e.target.closest ? e.target.closest('.fm-archive') : null;
 				var restoreBtn = e.target.closest ? e.target.closest('.fm-restore') : null;
 				var showBtn    = e.target.closest ? e.target.closest('.fm-show-archived') : null;
-				if (archiveBtn) {
+				if (viewBtn) {
+					e.preventDefault(); // open in-window instead of the new-tab fallback
+					wheeliamsPdfView(viewBtn.getAttribute('data-id'), viewBtn.getAttribute('data-name'));
+				} else if (archiveBtn) {
 					if (!confirm('Archive “' + archiveBtn.getAttribute('data-name') + '”? It will be hidden from the list but can be restored.')) return;
 					archiveBtn.disabled = true;
 					fileAction('archive', archiveBtn.getAttribute('data-id')).then(function (d) { if (d.error) { alert(d.error); archiveBtn.disabled = false; return; } loadFiles(); loadArchived(); });
@@ -238,6 +243,105 @@
 		  return str.replace(/[&<>"']/g, c => ({
 			'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
 		  })[c]);
+		}
+
+		// In-window PDF viewer — opens a drawing in an on-page modal (iframe) rather
+		// than forcing a download / new tab. Shared by the file manager's View button.
+		function wheeliamsPdfView(id, name) {
+			var url = '/drive_download.php?id=' + encodeURIComponent(id) + '&inline=1';
+			var m = document.getElementById('whPdfModal');
+			if (!m) {
+				m = document.createElement('div');
+				m.id = 'whPdfModal';
+				m.className = 'wh-pdf-modal';
+				m.innerHTML = '<div class="wh-pdf-backdrop" data-pdfclose></div>'
+					+ '<div class="wh-pdf-box">'
+					+ '<div class="wh-pdf-bar"><span class="wh-pdf-title"></span>'
+					+ '<span class="wh-pdf-actions"></span>'
+					+ '<button type="button" class="wh-pdf-close" data-pdfclose aria-label="Close">&times;</button></div>'
+					+ '<iframe class="wh-pdf-frame" title="Drawing preview"></iframe></div>';
+				document.body.appendChild(m);
+				m.addEventListener('click', function (e) { if (e.target.hasAttribute('data-pdfclose')) { m.classList.remove('open'); m.querySelector('.wh-pdf-frame').src = 'about:blank'; } });
+				document.addEventListener('keydown', function (e) { if (e.key === 'Escape') { m.classList.remove('open'); m.querySelector('.wh-pdf-frame').src = 'about:blank'; } });
+			}
+			m.querySelector('.wh-pdf-title').textContent = name || 'Drawing';
+			m.querySelector('.wh-pdf-actions').innerHTML =
+				'<a href="' + url + '" target="_blank" rel="noopener">Open in new tab</a> '
+				+ '<a href="/drive_download.php?id=' + encodeURIComponent(id) + '" download="' + escapeHtml(name || '') + '">Download</a>';
+			m.querySelector('.wh-pdf-frame').src = url;
+			m.classList.add('open');
+			return false;
+		}
+
+		// Workshop Notes photo gallery — lists images in a part's Drive "WORKSHOP
+		// NOTES" folder as inline thumbnails, uploads new ones, click to enlarge.
+		function wheeliamsWorkshopPhotos(mountId, code, type, canEdit) {
+			var mount = document.getElementById(mountId);
+			if (!mount) return;
+			var CATEGORY = 'WORKSHOP NOTES';
+			var IMG = /\.(jpe?g|png|gif|webp|heic|bmp)$/i;
+			mount.innerHTML = '';
+			var root = document.createElement('div');
+			root.className = 'wphotos';
+			mount.appendChild(root);
+
+			var gallery = document.createElement('div');
+			gallery.className = 'wphotos-grid';
+			gallery.innerHTML = 'Loading photos&hellip;';
+			root.appendChild(gallery);
+
+			if (canEdit) {
+				var up = document.createElement('div');
+				up.className = 'wphotos-upload';
+				up.innerHTML = '<label class="button small subtle">Add photo&hellip;<input type="file" class="wphotos-file" accept="image/*" hidden></label> <span class="wphotos-status muted"></span>';
+				root.appendChild(up);
+			}
+
+			function render(files) {
+				var imgs = (files || []).filter(function (f) { return f.category === CATEGORY && (/^image\//.test(f.mimeType || '') || IMG.test(f.name || '')); });
+				if (!imgs.length) { gallery.innerHTML = '<p class="no-files">No photos yet.</p>'; return; }
+				gallery.innerHTML = '';
+				imgs.forEach(function (f) {
+					var id = encodeURIComponent(f.id);
+					var fig = document.createElement('figure');
+					fig.className = 'wphoto';
+					fig.innerHTML = '<a href="/drive_download.php?id=' + id + '&inline=1" target="_blank" rel="noopener" class="wphoto-link" data-id="' + escapeHtml(f.id) + '" data-name="' + escapeHtml(f.name) + '">'
+						+ '<img src="/drive_download.php?id=' + id + '&inline=1" alt="' + escapeHtml(f.name) + '" loading="lazy"></a>'
+						+ '<figcaption>' + escapeHtml(f.name) + '</figcaption>';
+					gallery.appendChild(fig);
+				});
+			}
+
+			function load() {
+				gallery.innerHTML = 'Loading photos&hellip;';
+				fetch('/drive_files.php?productCode=' + encodeURIComponent(code) + '&type=' + encodeURIComponent(type))
+					.then(function (r) { return r.json(); })
+					.then(function (d) { if (d.error) { gallery.innerHTML = '<p class="error">' + escapeHtml(d.error) + '</p>'; return; } render(d.files); })
+					.catch(function () { gallery.innerHTML = '<p class="error">Error loading photos.</p>'; });
+			}
+
+			function upload(file) {
+				if (!file) return;
+				var status = root.querySelector('.wphotos-status');
+				if (status) status.textContent = 'Uploading ' + file.name + '…';
+				var fd = new FormData();
+				fd.append('file', file); fd.append('type', type); fd.append('partCode', code); fd.append('category', CATEGORY);
+				fetch('/upload_to_drive.php', { method: 'POST', body: fd })
+					.then(function (r) { return r.json(); })
+					.then(function (res) { if (res.error) { if (status) status.textContent = '✗ ' + res.error; return; } if (status) status.textContent = ''; load(); })
+					.catch(function () { if (status) status.textContent = '✗ Upload failed'; });
+			}
+
+			if (canEdit) {
+				var fileInput = root.querySelector('.wphotos-file');
+				if (fileInput) { fileInput.addEventListener('change', function () { upload(fileInput.files[0]); fileInput.value = ''; }); }
+			}
+			gallery.addEventListener('click', function (e) {
+				var link = e.target.closest ? e.target.closest('.wphoto-link') : null;
+				if (link) { e.preventDefault(); wheeliamsPdfView(link.getAttribute('data-id'), link.getAttribute('data-name')); }
+			});
+
+			load();
 		}
 	</script>
 </head>

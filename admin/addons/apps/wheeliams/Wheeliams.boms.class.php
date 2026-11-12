@@ -40,18 +40,39 @@ class Wheeliams_Boms extends PerchAPI_Factory
 		
 	}
 	
-	public function addToBom($type,$id,$component,$quantity,$userID){
-		
-		$sql = 'INSERT INTO perch3_wheeliams_boms (type, id, partCode, quantity, userID) VALUES ("'.$type.'", "'.$id.'", "'.$component.'", "'.$quantity.'", "'.$userID.'")';
-		$data = $this->db->execute($sql);
-		
+	/* Per-line tube values live on the BOM row (a standard tube keeps one spec but
+	   each kit carries its own length). tube_length is the per-use length in mm. */
+	protected function ensureBomColumns(){
+		$exists = $this->db->get_row("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='perch3_wheeliams_boms' AND COLUMN_NAME='tube_length'");
+		if(!$exists){
+			$this->db->execute("ALTER TABLE perch3_wheeliams_boms ADD COLUMN tube_length DECIMAL(14,3) DEFAULT NULL");
+		}
 	}
-	
-	public function updateBom($id,$quantity,$userID){
-		
-		$sql = 'UPDATE perch3_wheeliams_boms SET quantity="'.$quantity.'", userID="'.$userID.'" WHERE perch3_wheeliams_bomID='.$id;
+
+	public function addToBom($type,$id,$component,$quantity,$userID,$tubeLength=null){
+		$this->ensureBomColumns();
+		$tl  = ($tubeLength === null || $tubeLength === '') ? 'NULL' : (float)$tubeLength;
+		$sql = 'INSERT INTO perch3_wheeliams_boms (type, id, partCode, quantity, userID, tube_length) VALUES ("'.$type.'", "'.$id.'", "'.$component.'", "'.$quantity.'", "'.$userID.'", '.$tl.')';
 		$data = $this->db->execute($sql);
-		
+
+	}
+
+	/* Update just a tube line's per-use length (mm). */
+	public function updateTubeLength($bomID, $length){
+		$this->ensureBomColumns();
+		$len = ($length === null || $length === '') ? 'NULL' : (float)$length;
+		$this->db->execute('UPDATE perch3_wheeliams_boms SET tube_length='.$len.' WHERE perch3_wheeliams_bomID='.(int)$bomID);
+	}
+
+	public function updateBom($id,$quantity,$userID,$tubeLength=null){
+		$sql = 'UPDATE perch3_wheeliams_boms SET quantity="'.$quantity.'", userID="'.$userID.'"';
+		if($tubeLength !== null && $tubeLength !== ''){
+			$this->ensureBomColumns();
+			$sql .= ', tube_length='.(float)$tubeLength;
+		}
+		$sql .= ' WHERE perch3_wheeliams_bomID='.$id;
+		$data = $this->db->execute($sql);
+
 	}
 	
 	public function byPartCode($partCode){
@@ -137,6 +158,20 @@ class Wheeliams_Boms extends PerchAPI_Factory
 				$child['unit_qty']  = $unitQty;                          // qty per single parent (for display)
 				$child['bom_id']    = (int)$row['perch3_wheeliams_bomID']; // the BOM link row (for edit/delete)
 				$child['parent_id'] = (int)$row['id'];                     // parent componentID
+				// A rolled tube takes its length from the BOM line; recost it here.
+				if($child['type'] === 'tube'){
+					$lineLen = isset($row['tube_length']) ? (float)$row['tube_length'] : 0.0;
+					if($child['tube_is_rolled'] && $lineLen > 0){
+						$child['tube_length'] = $lineLen;
+						$child['unit_cost']   = (float)$child['tube_price_per_mm'] * $lineLen;
+					}
+					$child['line_cost'] = (float)$child['unit_cost'] * (float)$child['extended_qty'];
+					// Rolled tubes omit length from their code, so surface it on the row.
+					if($child['tube_is_rolled'] && (float)$child['tube_length'] > 0){
+						$lenLabel = rtrim(rtrim(number_format($child['tube_length'],1,'.',''), '0'), '.');
+						$child['description'] = trim($child['description'].' (L'.$lenLabel.'mm)');
+					}
+				}
 				$children[] = $child;
 			}
 		}
@@ -168,13 +203,33 @@ class Wheeliams_Boms extends PerchAPI_Factory
 
 	private function collate($node, &$flat, $isRoot=false){
 		if(!$isRoot){
-			$id = $node['componentID'];
-			if(!isset($flat[$id])){
-				$flat[$id] = $node;
-				$flat[$id]['total_qty'] = 0;
-				unset($flat[$id]['children'], $flat[$id]['unit_qty'], $flat[$id]['level']);
+			if(($node['type'] ?? '') === 'tube'){
+				// A tube is made in-house: its steel (length mm × qty) rolls up into its
+				// raw material's demand, rather than ordering the tube itself.
+				$matID = (int)($node['tube_material_id'] ?? 0);
+				$steel = (float)$node['tube_length'] * (float)$node['extended_qty'];
+				if($matID > 0 && $steel > 0){
+					if(!isset($flat[$matID])){
+						$matNode = $this->buildNode($matID, 0, (int)($node['level'] ?? 1));
+						if($matNode){
+							$flat[$matID] = $matNode;
+							$flat[$matID]['total_qty'] = 0;
+							unset($flat[$matID]['children'], $flat[$matID]['unit_qty'], $flat[$matID]['level']);
+						}
+					}
+					if(isset($flat[$matID])){
+						$flat[$matID]['total_qty'] += $steel; // in mm, alongside any direct raw-material demand
+					}
+				}
+			}else{
+				$id = $node['componentID'];
+				if(!isset($flat[$id])){
+					$flat[$id] = $node;
+					$flat[$id]['total_qty'] = 0;
+					unset($flat[$id]['children'], $flat[$id]['unit_qty'], $flat[$id]['level']);
+				}
+				$flat[$id]['total_qty'] += $node['extended_qty'];
 			}
-			$flat[$id]['total_qty'] += $node['extended_qty'];
 		}
 		foreach($node['children'] as $child){
 			$this->collate($child, $flat);
@@ -203,17 +258,62 @@ class Wheeliams_Boms extends PerchAPI_Factory
 			$sdyn = $s ? (json_decode($s['dynamicFields'], true) ?: array()) : array();
 			$supplierUrl = $sdyn['website'] ?? ($sdyn['url'] ?? '');
 			$unitCost = (float)$Components->getComponentPrice($componentID, $supplierID);
+			// Raw materials are purchased per stock length but used by the mm, so BOM
+			// lines are costed at price-per-usage-unit (£/mm = price ÷ stock length).
+			if($c['type'] === 'raw-materials'){
+				$stockLen = (float)($dyn['stock-length'] ?? 0);
+				if($stockLen > 0) $unitCost = $unitCost / $stockLen;
+			}
 		}
+
+		// Tubes are made in-house from a raw material: cost = material £/mm × length,
+		// supplier = the workshop, uom = EA. Rolled tubes take their length per BOM line
+		// (set in explode()); straight tubes use the length baked into their own spec.
+		$tubePricePerMm = 0.0; $tubeIsRolled = false; $tubeLength = 0.0; $tubeMaterialCode = ''; $tubeMatID = 0;
+		if($c['type'] === 'tube'){
+			$tubeIsRolled = (($dyn['is_rolled'] ?? '') === 'ROLLED');
+			$tubeLength   = (float)($dyn['length'] ?? 0);
+			// Resolve the steel raw material from the tube's section + size + grade
+			// (material = a Generic Material like "MILD STEEL-S235" → grade "S235").
+			$grade = '';
+			if(!empty($dyn['material'])){ $gp = explode('-', (string)$dyn['material']); $grade = $gp[1] ?? $dyn['material']; }
+			$matPrefix = strtoupper(trim(($dyn['section'] ?? '').'-'.($dyn['size'] ?? '').'-'.$grade, '-'));
+			if($matPrefix !== '' && $matPrefix !== '-'){
+				$mrow = $this->db->get_row("SELECT perch3_wheeliams_componentID FROM perch3_wheeliams_components WHERE type='raw-materials' AND partCode LIKE ".$this->db->pdb($matPrefix.'-%')." ORDER BY partCode ASC LIMIT 1");
+				$tubeMatID = $mrow ? (int)$mrow['perch3_wheeliams_componentID'] : 0;
+			}
+			if($tubeMatID){
+				$mat = $Components->component($tubeMatID);
+				if($mat){
+					$mdyn = json_decode($mat['dynamicFields'], true) ?: array();
+					$tubeMaterialCode = $mat['partCode'];
+					$matStockLen = (float)($mdyn['stock-length'] ?? 0);
+					$matSup   = $this->db->get_row('SELECT wheeliams_supplierID FROM perch3_wheeliams_components_suppliers WHERE perch3_wheeliams_componentID='.$tubeMatID.' AND current=1 LIMIT 1');
+					$matPrice = $matSup ? (float)$Components->getComponentPrice($tubeMatID, $matSup['wheeliams_supplierID']) : 0.0;
+					if($matStockLen > 0) $tubePricePerMm = $matPrice / $matStockLen;
+				}
+			}
+			if($tubeMaterialCode === ''){ $tubeMaterialCode = $matPrefix; } // show spec when no raw material matches
+			$supplierName = 'WHEELIAMS WORKSHOP';
+			$unitCost     = $tubePricePerMm * $tubeLength; // straight; rolled recomputed in explode()
+		}
+		$isTube = ($c['type'] === 'tube');
 
 		return array(
 			'componentID'      => (int)$componentID,
 			'partCode'         => $c['partCode'],
-			'description'      => $dyn['part_description'] ?? '',
-			'uom'              => $dyn['unit_of_measure'] ?? '',
+			'description'      => $isTube ? ($dyn['tube_description'] ?? '') : ($dyn['part_description'] ?? ''),
+			'uom'              => $isTube ? 'EA' : ($dyn['unit_of_measure'] ?? ''),
 			'type'             => $c['type'],
 			'process_type'     => $dyn['process_type'] ?? '',
-			'generic_material' => $dyn['generic_material'] ?? ($dyn['generic-material'] ?? ''),
+			'generic_material' => $isTube ? $tubeMaterialCode : ($dyn['generic_material'] ?? ($dyn['generic-material'] ?? '')),
 			'batch_rounding'   => (float)($dyn['batch_rounding_quantity'] ?? 0),
+			'stock_length'     => (float)($dyn['stock-length'] ?? 0), // raw materials: mm per stock length
+			'tube_price_per_mm'=> $tubePricePerMm,
+			'tube_is_rolled'   => $tubeIsRolled,
+			'tube_length'      => $tubeLength, // straight length; rolled overwritten by explode()
+			'tube_material_id' => $tubeMatID,
+
 			'is_service'       => ($c['type'] === 'services'),
 			'level'            => $level,
 			'bom_id'           => 0,         // set by caller for child nodes

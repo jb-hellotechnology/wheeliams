@@ -1,0 +1,126 @@
+<section>
+<perch:form id="component" app="wheeliams" method="post" class="flow fixed-submit">
+
+	<header>
+		<h2>Tube</h2>
+	</header>
+
+	<article>
+		<div>
+			<perch:label for="is_rolled">Is the tube rolled or straight?</perch:label>
+			<perch:input type="select" id="is_rolled" options="STRAIGHT,ROLLED" />
+		</div>
+
+		<div>
+			<perch:label for="tube_description">Description</perch:label>
+			<perch:input type="select" id="tube_description" options="<perch:forms id="values-tube_description" />" required />
+		</div>
+
+		<div>
+			<perch:label for="section">Section</perch:label>
+			<perch:input type="text" id="section" required />
+		</div>
+
+		<div>
+			<perch:label for="size">Size</perch:label>
+			<perch:input type="text" id="size" required />
+		</div>
+
+		<div>
+			<perch:label for="material">Material (Grade)</perch:label>
+			<perch:input type="select" id="material" options="<perch:forms id="values-tube_material" />" required />
+		</div>
+
+		<div class="tube-rolled-only">
+			<perch:label for="seam_orientation">Seam Orientation</perch:label>
+			<perch:input type="select" id="seam_orientation" options="ANY,UP,DOWN" />
+		</div>
+
+		<div class="tube-straight-only">
+			<perch:label for="length">Length (mm)</perch:label>
+			<perch:input type="number" id="length" step="any" min="0" />
+		</div>
+
+		<fieldset class="tube-rolled-only">
+			<legend>Bend 1</legend>
+			<div>
+				<perch:label for="bend1_angle">Bend 1 Angle (degrees)</perch:label>
+				<perch:input type="number" id="bend1_angle" step="any" min="0" />
+			</div>
+			<div>
+				<perch:label for="bend1_radius">Bend 1 Radius (mm)</perch:label>
+				<perch:input type="number" id="bend1_radius" step="any" min="0" />
+			</div>
+			<div>
+				<perch:label for="bend1_distance">Distance – short end to Bend 1 start (mm)</perch:label>
+				<perch:input type="number" id="bend1_distance" step="any" min="0" />
+			</div>
+			<div>
+				<perch:label for="bend1_springback">Spring Back 1 (mm)</perch:label>
+				<perch:input type="number" id="bend1_springback" step="any" min="0" />
+			</div>
+		</fieldset>
+
+		<fieldset class="tube-rolled-only">
+			<legend>Bend 2 (optional)</legend>
+			<div>
+				<perch:label for="bend2_angle">Bend 2 Angle (degrees)</perch:label>
+				<perch:input type="number" id="bend2_angle" step="any" min="0" />
+			</div>
+			<div>
+				<perch:label for="bend2_radius">Bend 2 Radius (mm)</perch:label>
+				<perch:input type="number" id="bend2_radius" step="any" min="0" />
+			</div>
+			<div>
+				<perch:label for="bend2_distance">Distance – short end to Bend 2 start (mm)</perch:label>
+				<perch:input type="number" id="bend2_distance" step="any" min="0" />
+			</div>
+			<div>
+				<perch:label for="bend2_springback">Spring Back 2 (mm)</perch:label>
+				<perch:input type="number" id="bend2_springback" step="any" min="0" />
+			</div>
+		</fieldset>
+
+		<div>
+			<perch:label for="general_notes">Notes</perch:label>
+			<perch:input type="textarea" id="general_notes" />
+		</div>
+
+		<perch:success>
+			<perch:if exists="return_url">
+				<p class="alert success">Tube saved. Returning to the kit&hellip; <a href="<perch:forms id="return_url" encode="false" />">continue now</a></p>
+				<script>setTimeout(function(){ location.href = '<perch:forms id="return_url" encode="false" />'; }, 600);</script>
+			<perch:else />
+				<p class="alert success">Tube saved. Returning to the list&hellip; <a href="/components/?type=<perch:forms id="type" />">continue now</a></p>
+				<script>setTimeout(function(){ location.href = '/components/?type=<perch:forms id="type" />'; }, 600);</script>
+			</perch:if>
+		</perch:success>
+	</article>
+
+	<footer>
+		<perch:input type="submit" value="Save" class="button primary" />
+	</footer>
+
+	<perch:input type="hidden" id="wheeliams_componentID" />
+	<perch:input type="hidden" id="type" />
+	<perch:input type="hidden" id="return_url" />
+
+</perch:form>
+</section>
+
+<script>
+// Show only the fields relevant to the chosen tube kind. A STRAIGHT tube's identity
+// includes its length; a ROLLED tube is defined by its bend profile (length is set
+// per use on the BOM), so it shows seam + bends instead.
+(function(){
+	var sel = document.getElementById('is_rolled');
+	if(!sel) return;
+	function sync(){
+		var rolled = sel.value === 'ROLLED';
+		document.querySelectorAll('.tube-rolled-only').forEach(function(el){ el.style.display = rolled ? '' : 'none'; });
+		document.querySelectorAll('.tube-straight-only').forEach(function(el){ el.style.display = rolled ? 'none' : ''; });
+	}
+	sel.addEventListener('change', sync);
+	sync();
+})();
+</script>

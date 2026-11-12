@@ -44,6 +44,11 @@ $name = $meta['name'] ?? 'download';
 $mime = $meta['mimeType'] ?? 'application/octet-stream';
 $size = isset($meta['size']) ? (int)$meta['size'] : 0;
 
+// Some Drive files carry a generic mime (e.g. octet-stream), which makes the
+// browser download rather than display them. Trust the .pdf extension so an
+// inline View actually renders the drawing in the browser's PDF viewer.
+if (preg_match('/\.pdf$/i', $name)) { $mime = 'application/pdf'; }
+
 // Google-native docs have no downloadable binary via alt=media — bail cleanly.
 if (strpos($mime, 'application/vnd.google-apps') === 0) {
     http_response_code(415);

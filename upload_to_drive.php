@@ -34,8 +34,10 @@ $validTypes = ['COMPONENT', 'FASTENER', 'RAW MATERIALS', 'KIT'];
 if (!$type || !$partCode)           json_error('Missing type or partCode.', 400);
 if (!in_array($type, $validTypes))  json_error('Invalid type.', 400);
 // Keep the category within the areas valid for this part type (else the first).
+// WORKSHOP NOTES is always allowed (photos from the Workshop Notes tab) even though
+// it isn't one of the part's standard file-area pickers.
 $allowedCats = wheeliams_drive_categories($type);
-if (!in_array($category, $allowedCats, true)) $category = $allowedCats[0];
+if (!in_array($category, $allowedCats, true) && $category !== 'WORKSHOP NOTES') $category = $allowedCats[0];
 
 // Native SolidWorks files are held separately, not published on the dashboard.
 $ext = strtolower(pathinfo($_FILES['file']['name'], PATHINFO_EXTENSION));

@@ -51,6 +51,39 @@
 
 	// FORM HANDLERS
 	
+	/* Escape a select-option LABEL so a comma in it doesn't split the options list
+	   and a pipe doesn't break the Perch "label|value" delimiter. Without this, a
+	   component whose description contains a comma (e.g. "(MODELS ONLY, NO DRAWING)")
+	   truncated the BOM picker, so not all components appeared. */
+	function wheeliams_opt_label($label){
+		return str_replace(array(',', '|'), array('__COMMA__', '/'), (string)$label);
+	}
+
+	/*
+	 * The parameter code for a tube, from its spec data (keys: material[=raw material
+	 * componentID], is_rolled, seam_orientation, bend1_*, bend2_*, length). Material
+	 * section+size (not grade/length) + STRAIGHT/ROLL profile. Rolled codes omit the
+	 * length (it's set per BOM line). Shared by the tube component save and the
+	 * "add manual tube" flow so both produce identical codes.
+	 */
+	function wheeliams_tube_partcode($data){
+		// Material section + size come from the tube's own fields (grade/length are
+		// excluded from the code per the client's spec).
+		$matCode = trim(($data['section'] ?? '').'-'.($data['size'] ?? ''), '-'); // e.g. CHS-38.1X1.5
+		if(($data['is_rolled'] ?? '') === 'ROLLED'){
+			$seam  = strtoupper($data['seam_orientation'] ?? '') ?: 'ANY';
+			$bend1 = 'A'.($data['bend1_angle'] ?? '').'-R'.($data['bend1_radius'] ?? '').'-D'.($data['bend1_distance'] ?? '');
+			$pc    = strtoupper($matCode.'-ROLL-S'.$seam.'-['.$bend1.']');
+			if(($data['bend2_angle'] ?? '') !== '' || ($data['bend2_radius'] ?? '') !== '' || ($data['bend2_distance'] ?? '') !== ''){
+				$bend2 = 'A'.($data['bend2_angle'] ?? '').'-R'.($data['bend2_radius'] ?? '').'-D'.($data['bend2_distance'] ?? '');
+				$pc   .= strtoupper('-['.$bend2.']');
+			}
+		}else{
+			$pc = strtoupper($matCode.'-STRAIGHT-L'.($data['length'] ?? ''));
+		}
+		return $pc;
+	}
+
 	function wheeliams_form($template, $return=false)
 	{
 		$API  = new PerchAPI(1.0, 'wheeliams');
@@ -156,7 +189,11 @@
 			$data['values-thread_size'] = $WheeliamsSettingsInput->setting_values('thread-size', 'size', 'standard');
 
 			$data['values-fastener_grade'] = $WheeliamsSettingsInput->setting_values('fastener-grade', 'grade', '');
-			
+
+			// Tube component dropdowns: descriptions + material (= Generic Material grade).
+			$data['values-tube_description'] = $WheeliamsSettingsInput->setting_values('tube-description', 'description', '');
+			$data['values-tube_material']    = $WheeliamsSettingsInput->setting_values('generic-material', 'material', '');
+
 			$data['values-members'] = $WheeliamsSettingsInput->members_list();
 			
 			$data['type'] = $_GET['type'];
@@ -167,6 +204,13 @@
 			}
 			
 			$data['cancel_link'] = "/components/?type=".$_GET['type'];
+
+			// "Return to kit" after editing a standard tube — only accept a safe
+			// internal path (no scheme / protocol-relative), to avoid open redirects.
+			$ret = $_GET['return'] ?? '';
+			if($ret !== '' && $ret[0] === '/' && strpos($ret, '//') !== 0 && strpos($ret, ':') === false){
+				$data['return_url'] = $ret;
+			}
 		}
 		if($template == 'supplier.html'){
 			$data = $WheeliamsSuppliers->supplier($_GET['id']);
@@ -198,24 +242,36 @@
 			$data['values-materials'] = ',';
 			foreach($materials as $material){
 				$json = json_decode($material['dynamicFields'], true);
-				$data['values-materials'] .= $material['partCode'].' ('.$json['unit_of_measure'].')|'.$material['perch3_wheeliams_componentID'].',';
+				$data['values-materials'] .= wheeliams_opt_label($material['partCode'].' ('.($json['unit_of_measure'] ?? '').')').'|'.$material['perch3_wheeliams_componentID'].',';
 			}
 			$data['values-materials'] = substr($data['values-materials'], 0, -1);
-			
+
 			$fasteners = $WheeliamsComponents->existing('fasteners');
 			$data['values-fasteners'] = ',';
 			foreach($fasteners as $fastener){
-				$data['values-fasteners'] .= $fastener['partCode'].'|'.$fastener['perch3_wheeliams_componentID'].',';
+				$data['values-fasteners'] .= wheeliams_opt_label($fastener['partCode']).'|'.$fastener['perch3_wheeliams_componentID'].',';
 			}
 			$data['values-fasteners'] = substr($data['values-fasteners'], 0, -1);
-			
+
 			$components = $WheeliamsComponents->existing('manufactured');
 			$data['values-components'] = ',';
 			foreach($components as $component){
 				$componentJson = json_decode($component['dynamicFields'], true);
-				$data['values-components'] .= $component['partCode'].' ('.$componentJson['part_description'].')|'.$component['perch3_wheeliams_componentID'].',';
+				$data['values-components'] .= wheeliams_opt_label($component['partCode'].' ('.($componentJson['part_description'] ?? '').')').'|'.$component['perch3_wheeliams_componentID'].',';
 			}
 			$data['values-components'] = substr($data['values-components'], 0, -1);
+
+			$tubes = $WheeliamsComponents->existing('tube');
+			$data['values-tubes'] = ',';
+			foreach($tubes as $tube){
+				$tubeJson = json_decode($tube['dynamicFields'], true) ?: array();
+				$data['values-tubes'] .= wheeliams_opt_label($tube['partCode'].' ('.($tubeJson['tube_description'] ?? '').')').'|'.$tube['perch3_wheeliams_componentID'].',';
+			}
+			$data['values-tubes'] = substr($data['values-tubes'], 0, -1);
+
+			// For the "add manual tube" form: tube descriptions + material (= Generic Material grade).
+			$data['values-tube_description'] = $WheeliamsSettingsInput->setting_values('tube-description', 'description', '');
+			$data['values-tube_material']    = $WheeliamsSettingsInput->setting_values('generic-material', 'material', '');
 			
 			$data['type'] = $_GET['type'];
 			
@@ -412,9 +468,9 @@
 					$type = $data['type'] ?? null;
 					
 					// Everything else goes into dynamicFields
-					$excluded = ['wheeliams_settings_inputID', 'type'];
+					$excluded = ['wheeliams_settings_inputID', 'type', 'return_url'];
 					$dynamicFields = array_diff_key($data, array_flip($excluded));
-									
+
 					if($type=='manufactured'){
 						$number = str_pad($id, 4, "0", STR_PAD_LEFT);
 						$partCode = strtoupper($data['part_no_prefix'].$data['component_type'].'-'.$number.'-'.$data['part_issue_code']);
@@ -441,8 +497,10 @@
 							$generic_material = $data['generic-material'];
 						}
 						$partCode = strtoupper($data['section'].'-'.$data['size'].'-'.$generic_material.'-'.$data['stock-length']);
+					}elseif($type=='tube'){
+						$partCode = wheeliams_tube_partcode($data);
 					}
-					
+
 					// Build the record to save
 					$record = [
 						'type'            => $type,
@@ -632,6 +690,16 @@
 						wheeliams_job_note_save($jobID, $SubmittedForm->data['notes'] ?? '', $Session->get('memberID'));
 					}
 				break;
+
+				case 'workshop_notes':
+					// Workshop production notes against a BOM (kit/component).
+					$Session = PerchMembers_Session::fetch();
+					$wbomID  = (int)($SubmittedForm->data['bomID'] ?? 0);
+					if($wbomID){
+						wheeliams_workshop_note_save($wbomID, $SubmittedForm->data['notes'] ?? '', $Session->get('memberID'));
+					}
+					PerchUtil::redirect($_SERVER['REQUEST_URI']);
+				break;
 				
 				case 'component_supplier_price':
 					$WheeliamsComponents = new Wheeliams_Components($API);
@@ -743,17 +811,55 @@
 					$rm = $SubmittedForm->data['quantity_add_rm'] ?? '';
 					$c  = $SubmittedForm->data['quantity_c'] ?? '';
 					$f  = $SubmittedForm->data['quantity_f'] ?? '';
+					$t  = $SubmittedForm->data['quantity_t'] ?? '';
+					$tubeLength = $SubmittedForm->data['tube_length'] ?? null;
 					if($rm !== ''){
 						$quantity = $rm;
 					}elseif($c !== ''){
 						$quantity = $c;
+					}elseif($t !== ''){
+						$quantity = $t;
 					}else{
 						$quantity = $f;
 					}
-					$WheeliamsBoms->addToBom($SubmittedForm->data['type'],$_GET['id'],$SubmittedForm->data['component'],$quantity,$Session->get('memberID'));
+					// Only a tube line carries a per-use length.
+					$WheeliamsBoms->addToBom($SubmittedForm->data['type'],$_GET['id'],$SubmittedForm->data['component'],$quantity,$Session->get('memberID'), ($t !== '' ? $tubeLength : null));
 					PerchUtil::redirect($_SERVER['REQUEST_URI']);
 				break;
-				
+
+				case 'bom_tube_length':
+					// Edit a tube line's per-use length (Cutting & Rolling tab).
+					$Session = PerchMembers_Session::fetch();
+					$WheeliamsBoms = new Wheeliams_Boms($API);
+					$WheeliamsBoms->updateTubeLength((int)($SubmittedForm->data['wheeliams_bomID'] ?? 0), $SubmittedForm->data['tube_length'] ?? null);
+					PerchUtil::redirect($_SERVER['REQUEST_URI']);
+				break;
+
+				case 'bom_tube_manual':
+					// "Add manual tube": create a one-off tube component from the entered
+					// spec, then add it to this BOM. A rolled tube's length is per-line.
+					$Session = PerchMembers_Session::fetch();
+					$WheeliamsComponents = new Wheeliams_Components($API);
+					$WheeliamsBoms = new Wheeliams_Boms($API);
+					$data = $SubmittedForm->data;
+					$isRolled = ($data['is_rolled'] ?? '') === 'ROLLED';
+					$partCode = wheeliams_tube_partcode($data);
+					$excluded = ['quantity_t', 'type'];
+					$dynamicFields = array_diff_key($data, array_flip($excluded));
+					if($isRolled) unset($dynamicFields['length']); // rolled length lives on the BOM line
+					$result = $WheeliamsComponents->create(array(
+						'type'          => 'tube',
+						'userID'        => $Session->get('memberID'),
+						'dynamicFields' => json_encode($dynamicFields),
+						'partCode'      => $partCode,
+					));
+					$newID   = $result->perch3_wheeliams_componentID();
+					$qty     = $data['quantity_t'] ?? '';
+					$tubeLen = $isRolled ? ($data['length'] ?? null) : null;
+					$WheeliamsBoms->addToBom('tube', $_GET['id'], $newID, $qty, $Session->get('memberID'), $tubeLen);
+					PerchUtil::redirect($_SERVER['REQUEST_URI']);
+				break;
+
 				case 'bom_edit':
 					$Session = PerchMembers_Session::fetch();
 					$WheeliamsBoms = new Wheeliams_Boms($API);
@@ -1285,6 +1391,8 @@
 				echo '<th>Description</th><th>Product Group</th><th>Product Short Code</th><th>Part Status</th><th>Vehicle</th><th>UOM</th>';
 			}elseif($type=='raw-materials'){
 				echo '<th>Mass/Unit Length (Kg)</th><th>UOM</th><th>Min Stock</th><th>Reorder Qty</th><th>Rounding Qty</th>';
+			}elseif($type=='tube'){
+				echo '<th>Description</th><th>Material</th><th>Type</th><th>Length (mm)</th>';
 			}
 			
 			echo '<th>Delete</th>';
@@ -1295,7 +1403,7 @@
 				$dynamic = json_decode($setting['dynamicFields'],true);
 				
 				preg_match('/-(\d{4})-/', $setting['partCode'], $matches);
-				$fourDigitNumber = $matches[1];
+				$fourDigitNumber = $matches[1] ?? '';
 				
 				echo '<tr>';
 				echo '<td><a href="'.$_SERVER['REQUEST_URI'].'&edit=1&id='.$setting['perch3_wheeliams_componentID'].'">'.$fourDigitNumber.'</a></td>';
@@ -1315,6 +1423,12 @@
 					echo '<td>'.htmlspecialchars($dynamic['maximum_stock_level'] ?? '').'</td>';
 					echo '<td>'.htmlspecialchars($dynamic['reorder_quantity'] ?? '').'</td>';
 					echo '<td>'.htmlspecialchars($dynamic['batch_rounding_quantity'] ?? '').'</td>';
+				}elseif($type=='tube'){
+					$tubeMat = trim(($dynamic['section'] ?? '').' '.($dynamic['size'] ?? '').' '.($dynamic['material'] ?? ''));
+					echo '<td>'.htmlspecialchars($dynamic['tube_description'] ?? '').'</td>';
+					echo '<td>'.htmlspecialchars($tubeMat).'</td>';
+					echo '<td>'.htmlspecialchars($dynamic['is_rolled'] ?? '').'</td>';
+					echo '<td>'.htmlspecialchars($dynamic['length'] ?? '').'</td>';
 				}
 				echo '<td><a href="'.$_SERVER['REQUEST_URI'].'&delete=1&id='.$setting['perch3_wheeliams_componentID'].'" class="warning">Delete</a></td>';
 				echo '</tr>';
@@ -1433,9 +1547,18 @@
 
 		$suppliers = $Components->componentSuppliers($id);
 
-		// UOM options for the supplier-UOM dropdown (standard list; defaults to EA).
+		// UOM options for the Stock UOM dropdown (standard list).
 		$SettingsInput = new Wheeliams_Settings_Inputs();
 		$uomOptions    = $SettingsInput->setting_values('uom', 'unit', '');
+
+		// Raw materials are bought by length but used by the mm — the Stock UOM
+		// defaults to Length (others EA), and we show a derived price-per-usage-unit.
+		$comp            = $Components->component($id);
+		$ctype           = $comp['type'] ?? '';
+		$cdyn            = json_decode($comp['dynamicFields'] ?? '', true) ?: array();
+		$stockLength     = (float)($cdyn['stock-length'] ?? 0);
+		$usageUom        = $cdyn['unit_of_measure'] ?? '';
+		$defaultStockUom = ($ctype === 'raw-materials') ? 'Length' : 'EA';
 
 		echo '<section>';
 		echo '<header>';
@@ -1505,10 +1628,22 @@
 			PerchSystem::set_var('price', $Components->getComponentPrice($id,$supID));
 			PerchSystem::set_var('cost_date', date('Y-m-d')); // default the cost date to today
 			PerchSystem::set_var('supplier_part_code', $sdet['supplier_part_code']);
-			PerchSystem::set_var('supplier_uom', $sdet['supplier_uom'] !== '' ? $sdet['supplier_uom'] : 'EA'); // default EA
+			PerchSystem::set_var('supplier_uom', $sdet['supplier_uom'] !== '' ? $sdet['supplier_uom'] : $defaultStockUom); // Length for raw materials, else EA
 			PerchSystem::set_var('supplier_link', $sdet['supplier_link']);
 			PerchSystem::set_var('values-supplier_uom', $uomOptions);
 			wheeliams_form('component_supplier_price.html');
+
+			// Raw materials: derived price per usage unit (price ÷ stock length) — the
+			// £/mm figure that BOM costing uses. Read-only, 4 dp.
+			if($ctype === 'raw-materials'){
+				$lp  = (float)$Components->getComponentPrice($id, $supID);
+				$ppu = ($stockLength > 0) ? ($lp / $stockLength) : 0;
+				echo '<div class="price-per-usage"><label>Price per Usage UOM</label><div>&pound;'.number_format($ppu, 4)
+					.' <span class="muted">per '.htmlspecialchars($usageUom ?: 'unit').'</span></div></div>';
+				if($stockLength <= 0){
+					echo '<p class="muted"><small>Set a Stock Length on the material to calculate this.</small></p>';
+				}
+			}
 
 			// Active link to this component on the supplier's own website, when set.
 			if(!empty($sdet['supplier_link'])){
@@ -2284,6 +2419,190 @@ JS;
 	}
 
 	/* Rolled-up material cost: leaves contribute their line cost; assemblies sum their children. */
+
+	/* A generic, labelled schematic of a rolled tube — shows what the bend
+	   parameters (angle, radius, distance from short end, seam) mean. */
+	function wheeliams_tube_schematic_svg(){
+		return <<<'SVG'
+<figure class="cr-schematic">
+<svg viewBox="0 0 520 190" role="img" aria-label="Tube bend parameters diagram">
+	<title>Tube bend parameters</title>
+	<!-- tube path: short end, bend 1, mid, bend 2 -->
+	<path d="M30,150 L150,150 Q190,150 190,110 L190,70 Q190,40 230,40 L430,40"
+		  fill="none" stroke="#185FA5" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+	<!-- short end marker -->
+	<circle cx="30" cy="150" r="5" fill="#d9534f"/>
+	<text x="18" y="172" font-size="11" fill="#555">SHORT END</text>
+	<!-- D1 distance -->
+	<line x1="30" y1="168" x2="150" y2="168" stroke="#999" stroke-width="1"/>
+	<text x="70" y="182" font-size="11" fill="#333">D1 (distance to bend 1)</text>
+	<!-- bend 1 label -->
+	<text x="150" y="128" font-size="11" fill="#333">BEND 1</text>
+	<text x="150" y="142" font-size="10" fill="#777">A1 angle · R1 radius</text>
+	<!-- bend 2 label -->
+	<text x="235" y="28" font-size="11" fill="#333">BEND 2</text>
+	<text x="235" y="16" font-size="10" fill="#777">A2 angle · R2 radius</text>
+	<!-- D2 distance -->
+	<line x1="30" y1="150" x2="30" y2="150" stroke="none"/>
+	<text x="320" y="30" font-size="11" fill="#333">D2 (distance to bend 2, from short end)</text>
+	<!-- seam note -->
+	<text x="360" y="62" font-size="10" fill="#777">SEAM: up / down / any</text>
+</svg>
+<figcaption>Bend parameters: A = angle (°), R = radius (mm), D = distance from the short end (mm), plus spring-back and seam orientation.</figcaption>
+</figure>
+SVG;
+	}
+
+	/*
+	 * Cutting & Rolling panel for a kit/component BOM — a tube-focused, mobile
+	 * friendly view of the tubes in this BOM, with add-standard / add-manual and
+	 * per-line length editing. Tube costs/lengths come from the exploded tree so
+	 * they match the BOM exactly. Straight tubes are listed first, then rolled.
+	 */
+	/* Walk an exploded tree collecting tube nodes. Tubes added directly to this
+	   BOM go in $direct; tubes that belong to a child component are grouped under
+	   that component in $byComponent (so a kit shows its components' tubes too). */
+	function wheeliams_cr_collect($node, &$direct, &$byComponent, $isRoot){
+		foreach((array)($node['children'] ?? array()) as $child){
+			if(($child['type'] ?? '') === 'tube'){
+				if($isRoot){
+					$direct[] = $child;
+				}else{
+					$pid = (int)$node['componentID'];
+					if(!isset($byComponent[$pid])){
+						$byComponent[$pid] = array('node' => $node, 'tubes' => array());
+					}
+					$byComponent[$pid]['tubes'][] = $child;
+				}
+			}else{
+				wheeliams_cr_collect($child, $direct, $byComponent, false);
+			}
+		}
+	}
+
+	/* Render one tube card. $opts: editable, canCost, editUrl, editLabel, indent. */
+	function wheeliams_cr_card($n, $d, $source, $opts){
+		$rolled  = !empty($n['tube_is_rolled']);
+		$canCost = !empty($opts['canCost']);
+		echo '<div class="cr-card'.(!empty($opts['indent']) ? ' cr-indent' : '').'">';
+		echo '<div class="cr-card-head"><span class="cr-type">'.($rolled ? 'ROLLED' : 'STRAIGHT').'</span> '
+			.'<strong>'.htmlspecialchars($n['partCode']).'</strong> <span class="cr-source">'.htmlspecialchars($source).'</span></div>';
+		echo '<dl class="cr-fields">';
+		echo '<dt>Description</dt><dd>'.htmlspecialchars($d['tube_description'] ?? '').'</dd>';
+		echo '<dt>Material</dt><dd>'.htmlspecialchars($n['generic_material'] ?? '').'</dd>';
+		echo '<dt>Length</dt><dd>'.wheeliams_num($n['tube_length']).' mm</dd>';
+		echo '<dt>Qty</dt><dd>'.wheeliams_num($n['extended_qty']).'</dd>';
+		if($rolled){
+			echo '<dt>Seam</dt><dd>'.htmlspecialchars($d['seam_orientation'] ?? 'ANY').'</dd>';
+			echo '<dt>Bend 1</dt><dd>A'.htmlspecialchars($d['bend1_angle'] ?? '').'&deg; R'.htmlspecialchars($d['bend1_radius'] ?? '').' D'.htmlspecialchars($d['bend1_distance'] ?? '').' SB'.htmlspecialchars($d['bend1_springback'] ?? '').'</dd>';
+			if(($d['bend2_angle'] ?? '') !== '' || ($d['bend2_radius'] ?? '') !== '' || ($d['bend2_distance'] ?? '') !== ''){
+				echo '<dt>Bend 2</dt><dd>A'.htmlspecialchars($d['bend2_angle'] ?? '').'&deg; R'.htmlspecialchars($d['bend2_radius'] ?? '').' D'.htmlspecialchars($d['bend2_distance'] ?? '').' SB'.htmlspecialchars($d['bend2_springback'] ?? '').'</dd>';
+			}
+		}
+		if($canCost){
+			echo '<dt>Line Cost</dt><dd>'.((float)$n['line_cost'] ? '&pound;'.number_format($n['line_cost'], 2) : '&mdash;').'</dd>';
+		}
+		echo '</dl>';
+		echo '<div class="cr-actions">';
+		// Direct tubes: edit the per-line length (rolled) + remove here.
+		if(!empty($opts['editable']) && $rolled && !empty($n['bom_id'])){
+			PerchSystem::set_var('wheeliams_bomID', $n['bom_id']);
+			PerchSystem::set_var('tube_length', $n['tube_length']);
+			wheeliams_form('bom_tube_length.html');
+		}
+		if(!empty($opts['editUrl'])){
+			echo '<a class="button small subtle" href="'.$opts['editUrl'].'">'.htmlspecialchars($opts['editLabel'] ?? 'Edit').'</a>';
+		}
+		if(!empty($opts['editable']) && !empty($n['bom_id'])){
+			PerchSystem::set_var('component', $n['bom_id']);
+			wheeliams_form('bom_delete_row.html');
+		}
+		echo '</div>';
+		echo '</div>';
+	}
+
+	/*
+	 * Cutting & Rolling panel for a kit/component BOM — a tube-focused, mobile
+	 * friendly view. Shows tubes added directly to this BOM (editable here) plus
+	 * tubes inherited from child components, grouped and indented under each
+	 * component (edited on that component — associative). Straight tubes first.
+	 */
+	function wheeliams_cutting_rolling_panel($kitID, $type){
+		$Boms       = new Wheeliams_Boms();
+		$Components  = new Wheeliams_Components();
+		$canCost    = wheeliams_can_order();
+
+		$tree = $Boms->explode((int)$kitID, 1);
+		$direct = array(); $byComponent = array();
+		if($tree){ wheeliams_cr_collect($tree, $direct, $byComponent, true); }
+
+		$sortTubes = function(&$arr){
+			usort($arr, function($a, $b){
+				$ar = !empty($a['tube_is_rolled']); $br = !empty($b['tube_is_rolled']);
+				if($ar !== $br) return $ar ? 1 : -1;
+				return strnatcasecmp($a['partCode'], $b['partCode']);
+			});
+		};
+		$sortTubes($direct);
+
+		echo wheeliams_tube_schematic_svg();
+
+		// Total tube count across direct + inherited.
+		$totalQty = 0;
+		foreach($direct as $n){ $totalQty += (float)$n['extended_qty']; }
+		foreach($byComponent as $g){ foreach($g['tubes'] as $n){ $totalQty += (float)$n['extended_qty']; } }
+		echo '<p class="cr-count">['.wheeliams_num($totalQty).'] tube'.($totalQty == 1 ? '' : 's').' in this cutting list.</p>';
+
+		if(!$direct && !$byComponent){
+			echo '<p>No tubes added yet.</p>';
+		}else{
+			echo '<div class="cr-list">';
+			// Returning here after editing a standard tube on its own page.
+			$returnUrl = '/boms/?type='.rawurlencode($type).'&edit=1&id='.(int)$kitID.'&tab=cutting';
+			foreach($direct as $n){
+				$comp = $Components->component($n['componentID']);
+				$d    = $comp ? (json_decode($comp['dynamicFields'], true) ?: array()) : array();
+				wheeliams_cr_card($n, $d, 'STANDARD', array(
+					'editable' => true,
+					'canCost'  => $canCost,
+					'editUrl'  => '/components/?type=tube&edit=1&id='.(int)$n['componentID'].'&return='.rawurlencode($returnUrl),
+					'editLabel'=> 'Edit standard tube',
+				));
+			}
+			echo '</div>';
+
+			// Tubes inherited from child components — grouped, read-only (edit on the component).
+			foreach($byComponent as $pid => $g){
+				$tubes = $g['tubes']; $sortTubes($tubes);
+				echo '<div class="cr-group">';
+				echo '<h3 class="cr-group-head">From component '.htmlspecialchars($g['node']['partCode'])
+					.' <span class="muted">'.htmlspecialchars($g['node']['description'] ?? '').'</span></h3>';
+				echo '<div class="cr-list">';
+				foreach($tubes as $n){
+					$comp = $Components->component($n['componentID']);
+					$d    = $comp ? (json_decode($comp['dynamicFields'], true) ?: array()) : array();
+					wheeliams_cr_card($n, $d, 'COMPONENT', array(
+						'editable' => false,
+						'canCost'  => $canCost,
+						'indent'   => true,
+						'editUrl'  => '/boms/?type=manufactured&edit=1&id='.$pid.'&tab=cutting',
+						'editLabel'=> 'Edit on component',
+					));
+				}
+				echo '</div></div>';
+			}
+		}
+
+		echo '<div class="cr-add split">';
+		echo '<div><h3>Add a standard tube</h3>';
+		wheeliams_form('bom_tubes.html');
+		echo '</div>';
+		echo '<div><h3>Add a manual tube</h3>';
+		wheeliams_form('bom_tube_manual.html');
+		echo '</div>';
+		echo '</div>';
+	}
+
 	function wheeliams_bom_rollup($node){
 		if(empty($node['children'])){
 			return (float)$node['line_cost'];
@@ -2478,6 +2797,93 @@ GRAPHQL;
 			$db->update('perch3_wheeliams_job_notes', array('notes' => $notes, 'updated_at' => $now, 'updated_by' => (int)$memberID), 'jobID', $jobID);
 		}else{
 			$db->insert('perch3_wheeliams_job_notes', array('jobID' => $jobID, 'notes' => $notes, 'updated_at' => $now, 'updated_by' => (int)$memberID));
+		}
+	}
+
+	/* ---------------------------------------------------------------------
+	 * Workshop notes — per-BOM (kit/component) production notes, shown on the
+	 * Workshop Notes tab of the BOM page. Keyed by the part's componentID.
+	 * ------------------------------------------------------------------- */
+	function wheeliams_workshop_notes_install(){
+		$db = PerchDB::fetch();
+		$db->execute("CREATE TABLE IF NOT EXISTS perch3_wheeliams_workshop_notes (
+			bomID INT UNSIGNED NOT NULL,
+			notes TEXT,
+			updated_at DATETIME DEFAULT NULL,
+			updated_by INT UNSIGNED DEFAULT NULL,
+			PRIMARY KEY (bomID)
+		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+	}
+
+	function wheeliams_workshop_note($bomID){
+		wheeliams_workshop_notes_install();
+		$db = PerchDB::fetch();
+		return $db->get_row('SELECT * FROM perch3_wheeliams_workshop_notes WHERE bomID='.(int)$bomID);
+	}
+
+	function wheeliams_workshop_note_save($bomID, $notes, $memberID){
+		wheeliams_workshop_notes_install();
+		$db    = PerchDB::fetch();
+		$bomID = (int)$bomID;
+		$now   = date('Y-m-d H:i:s');
+		if($db->get_row('SELECT bomID FROM perch3_wheeliams_workshop_notes WHERE bomID='.$bomID)){
+			$db->update('perch3_wheeliams_workshop_notes', array('notes' => $notes, 'updated_at' => $now, 'updated_by' => (int)$memberID), 'bomID', $bomID);
+		}else{
+			$db->insert('perch3_wheeliams_workshop_notes', array('bomID' => $bomID, 'notes' => $notes, 'updated_at' => $now, 'updated_by' => (int)$memberID));
+		}
+	}
+
+	/* The Workshop Notes tab content: free-text notes + a Drive photo gallery. */
+	function wheeliams_workshop_notes_panel($bomID, $partCode, $type){
+		$note = wheeliams_workshop_note($bomID);
+		echo '<section class="flow"><header><h2>Notes</h2></header><article>';
+		PerchSystem::set_var('bomID', $bomID);
+		PerchSystem::set_var('notes', $note['notes'] ?? '');
+		wheeliams_form('workshop_notes.html');
+		if($note && !empty($note['updated_at'])){
+			echo '<p class="muted"><small>Last updated '.htmlspecialchars(date('d/m/y H:i', strtotime($note['updated_at']))).'</small></p>';
+		}
+		echo '</article></section>';
+
+		// Photos stored in the part's Drive folder (WORKSHOP NOTES area), shown inline.
+		$driveType = wheeliams_drive_type_for($partCode, ($type === 'products') ? 'manufactured' : $type);
+		$canEdit   = wheeliams_can_order() ? 'true' : 'false';
+		echo '<section class="flow"><header><h2>Photos</h2></header><article>';
+		echo '<div id="workshop-photos"></div>';
+		echo '<script>wheeliamsWorkshopPhotos("workshop-photos", '
+			.json_encode($partCode).', '.json_encode($driveType).', '.$canEdit.');</script>';
+		echo '</article></section>';
+	}
+
+	/* Seed the Tube Descriptions settings list with the client's standard set (once).
+	   Idempotent — only inserts when the list is currently empty. */
+	function wheeliams_seed_tube_descriptions(){
+		$db = PerchDB::fetch();
+		$row = $db->get_row("SELECT perch3_wheeliams_settings_inputID FROM perch3_wheeliams_settings_inputs WHERE type='tube-description' LIMIT 1");
+		if($row) return;
+		$values = array(
+			'BACKRACK RAIL – NARROW',
+			'BACKRACK RAIL - WIDE',
+			'LADDER RAIL – CRANKED TYPE A',
+			'LADDER RAIL – CRANKED TYPE B',
+			'LADDER RAIL – CRANKED TYPE C',
+			'LADDER RAIL – CRANKED TYPE D',
+			'LADDER RAIL – STRAIGHT',
+			'LADDER RAIL – STRAIGHT+90 BEND',
+			'LADDER RUNG – SHORT',
+			'LADDER RUNG – STANDARD',
+			'WHEEL CARRIER – TUBE A',
+			'WHEEL CARRIER – TUBE B',
+			'WHEEL CARRIER – TUBE C',
+			'WHEEL CARRIER – TUBE D',
+		);
+		$Settings = new Wheeliams_Settings_Inputs();
+		foreach($values as $v){
+			$Settings->create(array(
+				'type'          => 'tube-description',
+				'userID'        => 0,
+				'dynamicFields' => json_encode(array('description' => $v)),
+			));
 		}
 	}
 

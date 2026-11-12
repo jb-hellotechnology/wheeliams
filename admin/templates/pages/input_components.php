@@ -21,6 +21,8 @@ perch_layout('header');
 				$title = 'Manufactured &amp; Purchased Components';
 			}elseif($_GET['type']=='fasteners'){
 				$title = 'Fasteners';
+			}elseif($_GET['type']=='tube'){
+				$title = 'Tubes';
 			}else{
 				$title = 'Raw Materials';
 			}
@@ -107,6 +109,9 @@ perch_layout('header');
 		</div>
 		<div class="option-card">
 			<h2><a href="/components?type=raw-materials">Raw Materials</a></h2>
+		</div>
+		<div class="option-card">
+			<h2><a href="/components?type=tube">Tubes</a></h2>
 		</div>
 	</div>
 	<?php

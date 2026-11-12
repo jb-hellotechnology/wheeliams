@@ -1,8 +1,8 @@
 <perch:form id="component_supplier_price" app="wheeliams" method="post" class="flow simple">
 
 		<div>
-			<perch:label for="wheeliams_supplierID">Update Price</perch:label>
-			<perch:input type="text" id="price" value="<perch:form id="price">
+			<perch:label for="price">Update Price</perch:label>
+			<div class="money-field"><span class="money-prefix">£</span><perch:input type="text" id="price" value="<perch:form id="price"></div>
 		</div>
 		<div>
 			<perch:label for="cost_date">Cost Date</perch:label>
@@ -17,7 +17,7 @@
 			<perch:input type="url" id="supplier_link" placeholder="https://…" value="<perch:form id="supplier_link">
 		</div>
 		<div>
-			<perch:label for="supplier_uom">Supplier UOM</perch:label>
+			<perch:label for="supplier_uom">Stock UOM</perch:label>
 			<perch:input type="select" id="supplier_uom" options="<perch:forms id="values-supplier_uom">" />
 		</div>
 		<perch:success>

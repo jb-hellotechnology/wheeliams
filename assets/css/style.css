@@ -2087,6 +2087,230 @@ form.fixed-submit footer{
 	max-width:130px;
 }
 
+/* £ prefix on currency input fields */
+.money-field{
+	display:flex;
+	align-items:center;
+	gap:0.25rem;
+}
+.money-field input{
+	flex:1;
+}
+.money-prefix{
+	color:#555;
+}
+
+/* In-window PDF viewer (wheeliamsPdfView) */
+.wh-pdf-modal{
+	position:fixed;
+	inset:0;
+	z-index:3000;
+	display:none;
+	align-items:center;
+	justify-content:center;
+}
+.wh-pdf-modal.open{
+	display:flex;
+}
+.wh-pdf-backdrop{
+	position:absolute;
+	inset:0;
+	background:rgba(0,0,0,0.6);
+}
+.wh-pdf-box{
+	position:relative;
+	background:#fff;
+	width:92%;
+	height:90%;
+	max-width:1100px;
+	border-radius:6px;
+	overflow:hidden;
+	display:flex;
+	flex-direction:column;
+	box-shadow:0 12px 44px rgba(0,0,0,0.4);
+}
+.wh-pdf-bar{
+	display:flex;
+	align-items:center;
+	gap:0.75rem;
+	padding:0.4rem 0.75rem;
+	border-bottom:1px solid #ddd;
+}
+.wh-pdf-title{
+	font-weight:600;
+	flex:1;
+	overflow:hidden;
+	text-overflow:ellipsis;
+	white-space:nowrap;
+}
+.wh-pdf-actions{
+	font-size:0.85rem;
+	white-space:nowrap;
+}
+.wh-pdf-close{
+	border:0;
+	background:none;
+	font-size:1.6rem;
+	line-height:1;
+	cursor:pointer;
+}
+.wh-pdf-frame{
+	flex:1;
+	width:100%;
+	border:0;
+}
+
+/* BOM / Cutting & Rolling tabs + tube cutting list */
+.bom-tabs{
+	display:flex;
+	gap:0.25rem;
+	border-bottom:2px solid #ddd;
+	margin:0.5rem 0 1rem;
+}
+.bom-tabs a{
+	padding:0.5rem 1rem;
+	border:1px solid #ddd;
+	border-bottom:0;
+	border-radius:6px 6px 0 0;
+	background:#f5f5f5;
+	color:#333;
+	text-decoration:none;
+	margin-bottom:-2px;
+}
+.bom-tabs a.active{
+	background:#fff;
+	border-bottom:2px solid #fff;
+	font-weight:600;
+}
+.cr-schematic{
+	margin:0 0 1rem;
+	max-width:560px;
+}
+.cr-schematic svg{
+	width:100%;
+	height:auto;
+	border:1px solid #eee;
+	border-radius:6px;
+	background:#fafafa;
+}
+.cr-schematic figcaption{
+	font-size:0.8rem;
+	color:#666;
+	margin-top:0.25rem;
+}
+.cr-count{
+	font-size:1rem;
+}
+.cr-list{
+	display:grid;
+	grid-template-columns:repeat(auto-fill, minmax(260px, 1fr));
+	gap:0.75rem;
+	margin-bottom:1.5rem;
+}
+.cr-card{
+	border:1px solid #ddd;
+	border-radius:6px;
+	padding:0.75rem;
+	background:#fff;
+}
+.cr-card-head{
+	display:flex;
+	align-items:center;
+	gap:0.4rem;
+	flex-wrap:wrap;
+	margin-bottom:0.4rem;
+}
+.cr-card-head .cr-type{
+	font-size:0.7rem;
+	font-weight:700;
+	background:#185FA5;
+	color:#fff;
+	padding:0.1rem 0.4rem;
+	border-radius:3px;
+}
+.cr-card-head .cr-source{
+	font-size:0.7rem;
+	color:#777;
+	margin-left:auto;
+}
+.cr-fields{
+	display:grid;
+	grid-template-columns:auto 1fr;
+	gap:0.15rem 0.6rem;
+	margin:0;
+	font-size:0.85rem;
+}
+.cr-fields dt{
+	color:#777;
+}
+.cr-fields dd{
+	margin:0;
+}
+.cr-actions{
+	display:flex;
+	align-items:center;
+	gap:0.4rem;
+	flex-wrap:wrap;
+	margin-top:0.6rem;
+}
+.cr-length-form{
+	display:flex;
+	align-items:center;
+	gap:0.25rem;
+	margin:0;
+}
+.cr-length-form input[type=number]{
+	max-width:90px;
+}
+.cr-add{
+	margin-top:1rem;
+}
+.cr-group{
+	border-left:3px solid #185FA5;
+	padding-left:0.75rem;
+	margin:0.5rem 0 1rem;
+}
+.cr-group-head{
+	font-size:0.95rem;
+	margin:0.25rem 0 0.5rem;
+}
+.cr-card.cr-indent{
+	background:#f7f9fc;
+}
+
+/* Workshop Notes photo gallery */
+.wphotos-grid{
+	display:grid;
+	grid-template-columns:repeat(auto-fill, minmax(140px, 1fr));
+	gap:0.6rem;
+	margin-bottom:0.75rem;
+}
+.wphoto{
+	margin:0;
+	border:1px solid #ddd;
+	border-radius:6px;
+	overflow:hidden;
+	background:#fff;
+}
+.wphoto img{
+	display:block;
+	width:100%;
+	height:120px;
+	object-fit:cover;
+	cursor:pointer;
+}
+.wphoto figcaption{
+	font-size:0.72rem;
+	color:#666;
+	padding:0.25rem 0.4rem;
+	white-space:nowrap;
+	overflow:hidden;
+	text-overflow:ellipsis;
+}
+.wphotos-status{
+	margin-left:0.5rem;
+}
+
 /* BOM quick-import panel (wheeliams_bom_import_panel) */
 .bom-import .bi-input{
 	width:100%;
