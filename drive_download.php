@@ -65,6 +65,10 @@ header('Content-Type: '.$mime);
 header('Content-Disposition: '.$disposition.'; filename="'.$asciiName.'"; filename*=UTF-8\'\''.rawurlencode($name));
 if ($size > 0) { header('Content-Length: '.$size); }
 header('X-Content-Type-Options: nosniff');
+// Perch's runtime sets X-Frame-Options: deny, which blocks the in-window viewer
+// (an iframe) even same-origin. Relax it to SAMEORIGIN so our own pages can embed
+// the drawing/photo inline, while still blocking cross-site framing.
+header('X-Frame-Options: SAMEORIGIN');
 
 // Stream the media straight to the client in chunks (memory-safe for big files).
 $mediaUrl = 'https://www.googleapis.com/drive/v3/files/'.rawurlencode($id).'?alt=media&supportsAllDrives=true';
