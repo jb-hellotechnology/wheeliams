@@ -44,7 +44,22 @@ if(!empty($_GET['component'])){
 }else{
 
 	echo '<h1>Stock Control</h1>';
-	wheeliams_stock_table();
+
+	// Tabs by stock type (tubes are made in-house — not stock items — so excluded).
+	$stockTabs = array(
+		'manufactured'  => 'Manufactured &amp; Purchased',
+		'fasteners'     => 'Fasteners',
+		'raw-materials' => 'Raw Materials',
+	);
+	$stockTab = (isset($_GET['stocktab']) && isset($stockTabs[$_GET['stocktab']])) ? $_GET['stocktab'] : 'manufactured';
+
+	echo '<nav class="bom-tabs">';
+	foreach($stockTabs as $key => $label){
+		echo '<a class="'.($stockTab===$key ? 'active' : '').'" href="/stock/?stocktab='.$key.'">'.$label.'</a>';
+	}
+	echo '</nav>';
+
+	wheeliams_stock_table($stockTab);
 
 }
 ?>

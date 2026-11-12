@@ -2231,10 +2231,10 @@ JS;
 	 * detail (level form + summary + used-on + drawing + movements). Replaces the
 	 * old separate Manage / Look-up / Report screens.
 	 */
-	function wheeliams_stock_table(){
+	function wheeliams_stock_table($type=null){
 		$Stock = new Wheeliams_Stock();
-		$rows = $Stock->report();
-		if(!$rows){ echo '<p>No components found.</p>'; return; }
+		$rows = $Stock->report($type);
+		if(!$rows){ echo '<p>No items found.</p>'; return; }
 
 		$data = array();
 		foreach($rows as $r){
