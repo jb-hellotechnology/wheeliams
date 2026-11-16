@@ -49,7 +49,10 @@ class Wheeliams_Settings_Inputs extends PerchAPI_Factory
 		}
 		sort($values, SORT_NATURAL);
 		array_unshift($values, " | ");
-		return implode(",", $values);
+		// Escape any double quotes so a value like 1" doesn't terminate the
+		// Perch options="..." attribute early and drop the rest of the list.
+		// PerchXMLTag un-escapes \" back to " when it parses the attribute.
+		return str_replace('"', '\\"', implode(",", $values));
 		
 	}
 	

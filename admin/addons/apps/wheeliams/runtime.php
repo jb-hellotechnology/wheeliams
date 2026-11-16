@@ -56,7 +56,7 @@
 	   component whose description contains a comma (e.g. "(MODELS ONLY, NO DRAWING)")
 	   truncated the BOM picker, so not all components appeared. */
 	function wheeliams_opt_label($label){
-		return str_replace(array(',', '|'), array('__COMMA__', '/'), (string)$label);
+		return str_replace(array(',', '|', '"'), array('__COMMA__', '/', '\\"'), (string)$label);
 	}
 
 	/*
