@@ -21,6 +21,11 @@
 			// Optional per-table default sort, e.g. data-order='[[1,"asc"]]'
 			var ord = $(this).attr('data-order');
 			if(ord){ try { opts.order = JSON.parse(ord); } catch(e){} }
+			// Optional: data-search="start" puts the search box on the left of the
+			// header (swapping it with the page-length menu).
+			if($(this).attr('data-search') === 'start'){
+				opts.layout = { topStart: 'search', topEnd: 'pageLength' };
+			}
 			$(this).DataTable(opts);
 		});
 	} );

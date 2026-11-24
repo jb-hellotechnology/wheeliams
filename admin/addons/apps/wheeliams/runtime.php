@@ -67,21 +67,69 @@
 	 * "add manual tube" flow so both produce identical codes.
 	 */
 	function wheeliams_tube_partcode($data){
-		// Material section + size come from the tube's own fields (grade/length are
-		// excluded from the code per the client's spec).
-		$matCode = trim(($data['section'] ?? '').'-'.($data['size'] ?? ''), '-'); // e.g. CHS-38.1X1.5
-		if(($data['is_rolled'] ?? '') === 'ROLLED'){
+		// A tube references a Raw Material component directly; [RAWMAT] = that
+		// material's part code. Length is part of the code for BOTH shapes now.
+		//   STRAIGHT: [RAWMAT]-STRAIGHT-L[LENGTH]
+		//   ROLLED:   [RAWMAT]-ROLL-L[LENGTH]-S[SEAM]-[A..-R..-D..]( -[A..-R..-D..])
+		// The two-bend shapes add the second bend group.
+		$rawMat = '';
+		if(!empty($data['raw_material'])){
+			$Components = new Wheeliams_Components();
+			$rc = $Components->component((int)$data['raw_material']);
+			$rawMat = $rc['partCode'] ?? '';
+		}
+		$rawMat = strtoupper(trim((string)$rawMat));
+		$len    = $data['length'] ?? '';
+
+		// Shape drives the code; fall back to the legacy is_rolled flag.
+		$shape = $data['shape'] ?? (($data['is_rolled'] ?? '') === 'ROLLED' ? 'ONE_BEND' : 'STRAIGHT');
+
+		if($shape === 'STRAIGHT'){
+			$pc = $rawMat.'-STRAIGHT-L'.$len;
+		}else{
 			$seam  = strtoupper($data['seam_orientation'] ?? '') ?: 'ANY';
 			$bend1 = 'A'.($data['bend1_angle'] ?? '').'-R'.($data['bend1_radius'] ?? '').'-D'.($data['bend1_distance'] ?? '');
-			$pc    = strtoupper($matCode.'-ROLL-S'.$seam.'-['.$bend1.']');
-			if(($data['bend2_angle'] ?? '') !== '' || ($data['bend2_radius'] ?? '') !== '' || ($data['bend2_distance'] ?? '') !== ''){
+			$pc    = $rawMat.'-ROLL-L'.$len.'-S'.$seam.'-['.$bend1.']';
+			if(strpos($shape, 'TWO_BENDS') === 0){
 				$bend2 = 'A'.($data['bend2_angle'] ?? '').'-R'.($data['bend2_radius'] ?? '').'-D'.($data['bend2_distance'] ?? '');
-				$pc   .= strtoupper('-['.$bend2.']');
+				$pc   .= '-['.$bend2.']';
 			}
-		}else{
-			$pc = strtoupper($matCode.'-STRAIGHT-L'.($data['length'] ?? ''));
 		}
-		return $pc;
+		return strtoupper($pc);
+	}
+
+	/* Human-readable tube shape label (new shape field, legacy is_rolled fallback). */
+	function wheeliams_tube_shape_label($dyn){
+		$map = array(
+			'STRAIGHT'           => 'Straight',
+			'ONE_BEND'           => 'One Bend',
+			'TWO_BENDS_SAME'     => 'Two Bends - Same Hand',
+			'TWO_BENDS_OPPOSITE' => 'Two Bends - Opposite Hand',
+		);
+		$shape = $dyn['shape'] ?? '';
+		if($shape !== '' && isset($map[$shape])) return $map[$shape];
+		$ir = $dyn['is_rolled'] ?? '';
+		if($ir === 'ROLLED')   return 'Rolled';
+		if($ir === 'STRAIGHT') return 'Straight';
+		return $shape ?: $ir;
+	}
+
+	/* Shape diagram image path for a tube (empty string if none resolvable). */
+	function wheeliams_tube_shape_image($dyn){
+		$map = array(
+			'STRAIGHT'           => 'straight.jpg',
+			'ONE_BEND'           => 'one-bend.jpg',
+			'TWO_BENDS_SAME'     => 'two-bends-same-hand.jpg',
+			'TWO_BENDS_OPPOSITE' => 'two-bends-opposite-hand.jpg',
+		);
+		$shape = $dyn['shape'] ?? '';
+		$file  = $map[$shape] ?? '';
+		if($file === ''){ // legacy fallback
+			$ir = $dyn['is_rolled'] ?? '';
+			if($ir === 'STRAIGHT') $file = 'straight.jpg';
+			elseif($ir === 'ROLLED') $file = 'one-bend.jpg';
+		}
+		return $file === '' ? '' : '/admin/addons/apps/wheeliams/assets/tubes/'.$file;
 	}
 
 	function wheeliams_form($template, $return=false)
@@ -190,9 +238,14 @@
 
 			$data['values-fastener_grade'] = $WheeliamsSettingsInput->setting_values('fastener-grade', 'grade', '');
 
-			// Tube component dropdowns: descriptions + material (= Generic Material grade).
+			// Tube component dropdowns: descriptions + a single Raw Material reference
+			// (the tube is made from a raw material; its code uses the material's code).
 			$data['values-tube_description'] = $WheeliamsSettingsInput->setting_values('tube-description', 'description', '');
-			$data['values-tube_material']    = $WheeliamsSettingsInput->setting_values('generic-material', 'material', '');
+			$data['values-tube_raw_material'] = ',';
+			foreach($WheeliamsComponents->existing('raw-materials') as $rm){
+				$data['values-tube_raw_material'] .= wheeliams_opt_label($rm['partCode']).'|'.$rm['perch3_wheeliams_componentID'].',';
+			}
+			$data['values-tube_raw_material'] = rtrim($data['values-tube_raw_material'], ',');
 
 			$data['values-members'] = $WheeliamsSettingsInput->members_list();
 			
@@ -217,6 +270,9 @@
 			foreach(json_decode($data['dynamicFields'],true) AS $key=>$value){
 				$data[$key] = $value;
 			}
+			// Contact Type options for the primary-contact dropdown (same list the
+			// Contacts section uses).
+			$data['contact_types'] = "Please Select|,".$WheeliamsSettingsInput->setting_values('contact-types', 'contact-type', '');
 		}
 		if($template == 'component_supplier_add.html'){
 			$data = $WheeliamsSuppliers->existing();
@@ -490,12 +546,15 @@
 						$partCode .= '-'.$data['fastener_finish'];
 						
 					}elseif($type=='raw-materials'){
-						$materials = explode("-", $data['generic-material']);
-						if(count($materials)>0){
-							$generic_material = $materials[1];
-						}else{
-							$generic_material = $data['generic-material'];
-						}
+						// Historically the grade was taken as the text after the first
+						// hyphen (e.g. "MILD STEEL-S235" → "S235"). A generic material
+						// WITHOUT a hyphen (e.g. "E220 (ERW1) BSEN10305" or
+						// 'ASTM S/S PIPE 2" SCHED.80S') left $materials[1] undefined, so
+						// the material dropped out of the code entirely — fall back to the
+						// whole value so the code always concatenates its material.
+						$gm    = (string)($data['generic-material'] ?? '');
+						$parts = explode('-', $gm, 2);
+						$generic_material = (isset($parts[1]) && trim($parts[1]) !== '') ? $parts[1] : $gm;
 						$partCode = strtoupper($data['section'].'-'.$data['size'].'-'.$generic_material.'-'.$data['stock-length']);
 					}elseif($type=='tube'){
 						$partCode = wheeliams_tube_partcode($data);
@@ -518,11 +577,20 @@
 						// A manufactured part's NUMBER is its identity and must never be
 						// re-derived from the DB row id on edit — that rewrote imported codes
 						// like A06-0419-C to A06-<rowid>-C. Keep the existing number; still let
-						// prefix / component-type / issue-code edits flow through.
+						// prefix / component-type / issue-code edits flow through. Any middle
+						// segment (a legacy LH/RH hand suffix, e.g. A02-0044-LH-C) must also be
+						// preserved — rebuilding as prefix-number-issue silently collapsed
+						// A02-0044-LH-C and A02-0044-RH-C to the same A02-0044-C.
 						if ($type == 'manufactured') {
 							$existing = $WheeliamsComponents->component($id);
-							if ($existing && preg_match('/-(\d+)-/', $existing['partCode'], $m)) {
-								$record['partCode'] = strtoupper($data['part_no_prefix'].$data['component_type'].'-'.$m[1].'-'.$data['part_issue_code']);
+							$code     = $existing['partCode'] ?? '';
+							// Structure: <PREFIX+TYPE>-<NUMBER>-[<HAND>-]<ISSUE>
+							if ($code !== '' && preg_match('/^.*?-(\d+)-(.*)$/', $code, $m)) {
+								$number    = $m[1];
+								$tailParts = explode('-', $m[2]); // e.g. ["C"] or ["LH","C"]
+								array_pop($tailParts);            // drop the old issue code (may be edited)
+								$mid       = $tailParts ? implode('-', $tailParts).'-' : ''; // "LH-" / "RH-" / ""
+								$record['partCode'] = strtoupper($data['part_no_prefix'].$data['component_type'].'-'.$number.'-'.$mid.$data['part_issue_code']);
 							} else {
 								unset($record['partCode']); // can't parse a number — leave the stored code untouched
 							}
@@ -653,8 +721,11 @@
 							'timestamp' => date('Y-m-d H:i:s'),
 						]);
 					}
+					// Land back on the Supplier List (with the add-new form) after
+					// any save, rather than leaving the detail fields on screen.
+					PerchUtil::redirect('/settings/suppliers/');
 				break;
-				
+
 				case 'delete_supplier':
 					$WheeliamsSuppliers = new Wheeliams_Suppliers($API);
 				
@@ -705,16 +776,25 @@
 					$WheeliamsComponents = new Wheeliams_Components($API);
 					$supID = $SubmittedForm->data['wheeliams_supplierID'];
 					$newPr = $SubmittedForm->data['price'] ?? '';
-					$curPr = $WheeliamsComponents->getComponentPrice($_GET['id'], $supID);
-					// Only log a new price point when the price actually changed, so editing just
-					// the supplier part code / UOM doesn't add a duplicate price row.
-					if($newPr !== '' && (float)$newPr != (float)$curPr){
-						$WheeliamsComponents->componentPrice($_GET['id'], $supID, $newPr, $SubmittedForm->data['cost_date'] ?? null);
+					$note  = trim((string)($SubmittedForm->data['cost_note'] ?? ''));
+					// Normalise the chosen cost date (defaults to today).
+					$costDateIn = $SubmittedForm->data['cost_date'] ?? null;
+					$costDate   = ($costDateIn && strtotime($costDateIn)) ? date('Y-m-d', strtotime($costDateIn)) : date('Y-m-d');
+					// Most recent recorded point for this supplier (price + date).
+					$existing = $WheeliamsComponents->componentPrices($_GET['id'], $supID);
+					$lastPr   = $existing ? $existing[0]['price'] : null;
+					$lastDate = $existing ? (!empty($existing[0]['cost_date']) ? $existing[0]['cost_date'] : substr($existing[0]['timestamp'],0,10)) : null;
+					// Record a price point on Update when the price changed, the cost
+					// date differs from the last record, or a note was entered — so an
+					// unchanged quote can still be stamped against today's date, and
+					// editing just the part code / UOM doesn't add a duplicate row.
+					if($newPr !== '' && ($lastPr === null || (float)$newPr != (float)$lastPr || $costDate != $lastDate || $note !== '')){
+						$WheeliamsComponents->componentPrice($_GET['id'], $supID, $newPr, $costDate, $note);
 					}
 					$WheeliamsComponents->setSupplierDetails($_GET['id'], $supID, $SubmittedForm->data['supplier_part_code'] ?? '', $SubmittedForm->data['supplier_uom'] ?? '', $SubmittedForm->data['supplier_link'] ?? '');
 					// The price form is rendered once per supplier; clear these POST values so they
 					// don't repopulate (and overwrite) the other suppliers' fields on re-render.
-					unset($_POST['price'], $_POST['cost_date'], $_POST['supplier_part_code'], $_POST['supplier_uom'], $_POST['supplier_link']);
+					unset($_POST['price'], $_POST['cost_date'], $_POST['cost_note'], $_POST['supplier_part_code'], $_POST['supplier_uom'], $_POST['supplier_link']);
 				break;
 
 				case 'price_edit':
@@ -1382,7 +1462,7 @@
 			$show_fields = array('part_description');
 		
 			echo '<div class="table-container compact">';
-			echo '<table class="datatable">';
+			echo '<table class="datatable" data-search="start">';
 			echo '<thead class="first-row">';
 			echo '<th>#</th>';
 			echo '<th>Part Code</th>';
@@ -1390,9 +1470,11 @@
 			if($type=='manufactured'){
 				echo '<th>Description</th><th>Product Group</th><th>Product Short Code</th><th>Part Status</th><th>Vehicle</th><th>UOM</th>';
 			}elseif($type=='raw-materials'){
-				echo '<th>Mass/Unit Length (Kg)</th><th>UOM</th><th>Min Stock</th><th>Reorder Qty</th><th>Rounding Qty</th>';
+				echo '<th>Mass/Unit Length (Kg)</th><th>Usage UOM</th><th>Current Supplier</th><th>Min Stock</th><th>Reorder Qty</th><th>Rounding Qty</th>';
+			}elseif($type=='fasteners'){
+				echo '<th>Fastener Type</th><th>Thread Size</th><th>Length</th><th>Supplier</th><th>Current Cost</th>';
 			}elseif($type=='tube'){
-				echo '<th>Description</th><th>Material</th><th>Type</th><th>Length (mm)</th>';
+				echo '<th>Description</th><th>Raw Material</th><th>Shape</th><th>Length (mm)</th>';
 			}
 			
 			echo '<th>Delete</th>';
@@ -1418,16 +1500,33 @@
 					echo '<td>'.htmlspecialchars($vehicle).'</td>';
 					echo '<td>'.htmlspecialchars($dynamic['unit_of_measure'] ?? '').'</td>';
 				}elseif($type=='raw-materials'){
+					$info = $Components->currentSupplierInfo($setting['perch3_wheeliams_componentID']);
 					echo '<td>'.htmlspecialchars($dynamic['mass_per_unit_length'] ?? '').'</td>';
 					echo '<td>'.htmlspecialchars($dynamic['unit_of_measure'] ?? '').'</td>';
+					echo '<td>'.htmlspecialchars($info['name']).'</td>';
 					echo '<td>'.htmlspecialchars($dynamic['maximum_stock_level'] ?? '').'</td>';
 					echo '<td>'.htmlspecialchars($dynamic['reorder_quantity'] ?? '').'</td>';
 					echo '<td>'.htmlspecialchars($dynamic['batch_rounding_quantity'] ?? '').'</td>';
+				}elseif($type=='fasteners'){
+					$info = $Components->currentSupplierInfo($setting['perch3_wheeliams_componentID']);
+					$cost = $info['price']!==null ? '&pound;'.number_format($info['price'],2) : '&mdash;';
+					echo '<td>'.htmlspecialchars($dynamic['fastener_type'] ?? '').'</td>';
+					echo '<td>'.htmlspecialchars($dynamic['thread_size'] ?? '').'</td>';
+					echo '<td>'.htmlspecialchars($dynamic['length'] ?? '').'</td>';
+					echo '<td>'.htmlspecialchars($info['name']).'</td>';
+					echo '<td>'.$cost.'</td>';
 				}elseif($type=='tube'){
-					$tubeMat = trim(($dynamic['section'] ?? '').' '.($dynamic['size'] ?? '').' '.($dynamic['material'] ?? ''));
+					// Raw material: resolve the referenced raw-material part code (new
+					// model); fall back to the legacy section/size/grade text.
+					$rawMat = '';
+					if(!empty($dynamic['raw_material'])){
+						$rm = $Components->component((int)$dynamic['raw_material']);
+						$rawMat = $rm['partCode'] ?? '';
+					}
+					if($rawMat === ''){ $rawMat = trim(($dynamic['section'] ?? '').' '.($dynamic['size'] ?? '').' '.($dynamic['material'] ?? '')); }
 					echo '<td>'.htmlspecialchars($dynamic['tube_description'] ?? '').'</td>';
-					echo '<td>'.htmlspecialchars($tubeMat).'</td>';
-					echo '<td>'.htmlspecialchars($dynamic['is_rolled'] ?? '').'</td>';
+					echo '<td>'.htmlspecialchars($rawMat).'</td>';
+					echo '<td>'.htmlspecialchars(wheeliams_tube_shape_label($dynamic)).'</td>';
 					echo '<td>'.htmlspecialchars($dynamic['length'] ?? '').'</td>';
 				}
 				echo '<td><a href="'.$_SERVER['REQUEST_URI'].'&delete=1&id='.$setting['perch3_wheeliams_componentID'].'" class="warning">Delete</a></td>';
@@ -1439,6 +1538,64 @@
 		}
 	}
 	
+	/* GET form to look components up by supplier name (Reports/Searches). */
+	function wheeliams_component_supplier_search($selectedID=null){
+		$Suppliers = new Wheeliams_Suppliers();
+		$suppliers = $Suppliers->existing();
+		echo '<form method="get" action="/components/" class="inline-search">';
+		echo '<label for="supplier-search">Find components by supplier</label> ';
+		echo '<select name="supplier" id="supplier-search" class="select-2">';
+		echo '<option value="">Please Select…</option>';
+		if($suppliers){
+			foreach($suppliers as $s){
+				$sel = ((int)$selectedID === (int)$s['wheeliams_supplierID']) ? ' selected' : '';
+				echo '<option value="'.(int)$s['wheeliams_supplierID'].'"'.$sel.'>'.htmlspecialchars($s['name']).'</option>';
+			}
+		}
+		echo '</select> ';
+		echo '<button type="submit" class="button primary">Search</button>';
+		echo '</form>';
+	}
+
+	/* Results table for the supplier look-up: every component linked to a supplier. */
+	function wheeliams_components_by_supplier_table($supplierID){
+		$Components = new Wheeliams_Components();
+		$Suppliers  = new Wheeliams_Suppliers();
+		$supplier   = $Suppliers->supplier($supplierID);
+		$name       = $supplier['name'] ?? ('#'.$supplierID);
+		$rows       = $Components->componentsBySupplier($supplierID);
+
+		echo '<h1>Components supplied by '.htmlspecialchars($name).'</h1>';
+		wheeliams_component_supplier_search($supplierID);
+
+		if(!$rows){
+			echo '<p>No components are linked to this supplier.</p>';
+			echo '<p><a href="/components/" class="button back">&larr; Back to Components</a></p>';
+			return;
+		}
+
+		$typeLabels = array('manufactured'=>'Manufactured &amp; Purchased','fasteners'=>'Fasteners','raw-materials'=>'Raw Materials','tube'=>'Tubes');
+		echo '<div class="table-container compact"><table class="datatable" data-search="start">';
+		echo '<thead class="first-row"><th>Part Code</th><th>Type</th><th>Description</th><th>Current Supplier?</th><th>Current Cost</th></thead><tbody>';
+		foreach($rows as $r){
+			$dyn  = json_decode($r['dynamicFields'], true) ?: array();
+			$desc = $dyn['part_description'] ?? ($dyn['tube_description'] ?? '');
+			$info = $Components->currentSupplierInfo($r['perch3_wheeliams_componentID']);
+			$cost = $info['price']!==null ? '&pound;'.number_format($info['price'],2) : '&mdash;';
+			$isCurrent = ((int)($r['cs_current'] ?? 0) === 1) ? 'Yes' : '';
+			$editUrl = '/components/?type='.urlencode($r['type']).'&edit=1&id='.(int)$r['perch3_wheeliams_componentID'];
+			echo '<tr>';
+			echo '<td><a href="'.$editUrl.'">'.htmlspecialchars($r['partCode']).'</a></td>';
+			echo '<td>'.($typeLabels[$r['type']] ?? htmlspecialchars($r['type'])).'</td>';
+			echo '<td>'.htmlspecialchars($desc).'</td>';
+			echo '<td>'.$isCurrent.'</td>';
+			echo '<td>'.$cost.'</td>';
+			echo '</tr>';
+		}
+		echo '</tbody></table></div>';
+		echo '<p><a href="/components/" class="button back">&larr; Back to Components</a></p>';
+	}
+
 	function wheeliams_component_changelog($type, $id){
 		
 		$Components = new Wheeliams_Components();
@@ -1488,13 +1645,23 @@
 			echo '<table class="">';
 			echo '<tr class="first-row">';
 			echo '<th>Name</th>';
+			echo '<th>Website</th>';
 			echo '<th>Timestamp</th>';
 			echo '<th>Delete</th>';
 			echo '</tr>';
-			
+
 			foreach($existing as $setting){
+				$dyn = json_decode($setting['dynamicFields'], true) ?: array();
+				$web = trim($dyn['website'] ?? '');
 				echo '<tr>';
 				echo '<td><a href="'.$_SERVER['REQUEST_URI'].'?edit=1&id='.$setting['wheeliams_supplierID'].'">'.$setting['name'].'</a></td>';
+				if($web !== ''){
+					$href = preg_match('~^https?://~i', $web) ? $web : 'https://'.$web;
+					$label = preg_replace('~^https?://~i', '', rtrim($web, '/'));
+					echo '<td><a href="'.htmlspecialchars($href).'" target="_blank" rel="noopener">'.htmlspecialchars($label).'</a></td>';
+				}else{
+					echo '<td></td>';
+				}
 				echo '<td>'.$setting['timestamp'].'</td>';
 				echo '<td><a href="'.$_SERVER['REQUEST_URI'].'?delete=1&id='.$setting['wheeliams_supplierID'].'" class="warning">Delete</a></td>';
 				echo '</tr>';
@@ -1654,12 +1821,13 @@
 			$prices = $Components->componentPrices($id, $supID);
 			if($prices){
 				echo '<details class="price-history"><summary>Price history ('.count($prices).')</summary>';
-				echo '<table class="compact"><tr class="first-row"><th>Date</th><th>Price</th><th>Correct</th><th></th></tr>';
+				echo '<table class="compact"><tr class="first-row"><th>Date</th><th>Price</th><th>Note</th><th>Correct</th><th></th></tr>';
 				foreach($prices as $p){
 					$pid   = $p['wheeliams_components_suppliers_priceID'];
 					$pdate = !empty($p['cost_date']) ? $p['cost_date'] : explode(' ', $p['timestamp'])[0];
 					echo '<tr><td>'.htmlspecialchars(date('d/m/y', strtotime($pdate))).'</td>';
 					echo '<td>&pound;'.number_format((float)$p['price'], 2).'</td>';
+					echo '<td>'.htmlspecialchars($p['cost_note'] ?? '').'</td>';
 					echo '<td>';
 					PerchSystem::set_var('wheeliams_components_suppliers_priceID', $pid);
 					PerchSystem::set_var('price', $p['price']);
@@ -2484,12 +2652,17 @@ SVG;
 	function wheeliams_cr_card($n, $d, $source, $opts){
 		$rolled  = !empty($n['tube_is_rolled']);
 		$canCost = !empty($opts['canCost']);
+		$shapeImg = wheeliams_tube_shape_image($d);
 		echo '<div class="cr-card'.(!empty($opts['indent']) ? ' cr-indent' : '').'">';
-		echo '<div class="cr-card-head"><span class="cr-type">'.($rolled ? 'ROLLED' : 'STRAIGHT').'</span> '
+		echo '<div class="cr-card-head"><span class="cr-type">'.htmlspecialchars(wheeliams_tube_shape_label($d)).'</span> '
 			.'<strong>'.htmlspecialchars($n['partCode']).'</strong> <span class="cr-source">'.htmlspecialchars($source).'</span></div>';
+		// The diagram for this tube's shape (replaces the old generic schematic).
+		if($shapeImg !== ''){
+			echo '<div class="cr-diagram"><img src="'.htmlspecialchars($shapeImg).'" alt="'.htmlspecialchars(wheeliams_tube_shape_label($d)).'"></div>';
+		}
 		echo '<dl class="cr-fields">';
 		echo '<dt>Description</dt><dd>'.htmlspecialchars($d['tube_description'] ?? '').'</dd>';
-		echo '<dt>Material</dt><dd>'.htmlspecialchars($n['generic_material'] ?? '').'</dd>';
+		echo '<dt>Raw Material</dt><dd>'.htmlspecialchars($n['generic_material'] ?? '').'</dd>';
 		echo '<dt>Length</dt><dd>'.wheeliams_num($n['tube_length']).' mm</dd>';
 		echo '<dt>Qty</dt><dd>'.wheeliams_num($n['extended_qty']).'</dd>';
 		if($rolled){
@@ -2504,12 +2677,8 @@ SVG;
 		}
 		echo '</dl>';
 		echo '<div class="cr-actions">';
-		// Direct tubes: edit the per-line length (rolled) + remove here.
-		if(!empty($opts['editable']) && $rolled && !empty($n['bom_id'])){
-			PerchSystem::set_var('wheeliams_bomID', $n['bom_id']);
-			PerchSystem::set_var('tube_length', $n['tube_length']);
-			wheeliams_form('bom_tube_length.html');
-		}
+		// Length is fixed in the standard tube now — change it via "Edit standard
+		// tube", not here (no per-line length edit).
 		if(!empty($opts['editUrl'])){
 			echo '<a class="button small subtle" href="'.$opts['editUrl'].'">'.htmlspecialchars($opts['editLabel'] ?? 'Edit').'</a>';
 		}
@@ -2545,7 +2714,31 @@ SVG;
 		};
 		$sortTubes($direct);
 
-		echo wheeliams_tube_schematic_svg();
+		echo '<style>
+		.cr-add{margin:0 0 1.2rem;max-width:460px}
+		.cr-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:1rem;margin:1rem 0}
+		.cr-card{border:1px solid #d4d9e0;border-radius:10px;padding:.8rem;background:#fff}
+		.cr-card.cr-indent{border-left:3px solid #185FA5}
+		.cr-card-head{display:flex;align-items:center;gap:.4rem;flex-wrap:wrap;margin-bottom:.4rem}
+		.cr-card-head .cr-type{font-size:.68rem;font-weight:700;letter-spacing:.03em;text-transform:uppercase;background:#eef2f7;color:#185FA5;padding:.15rem .5rem;border-radius:999px}
+		.cr-card-head strong{font-size:.82rem}
+		.cr-card-head .cr-source{font-size:.62rem;color:#8a94a2;margin-left:auto}
+		.cr-diagram{text-align:center;margin:.2rem 0 .6rem}
+		.cr-diagram img{max-width:190px;width:100%;height:auto}
+		.cr-fields{display:grid;grid-template-columns:auto 1fr;gap:.12rem .6rem;margin:0}
+		.cr-fields dt{font-weight:600;color:#5b6572;font-size:.78rem}
+		.cr-fields dd{margin:0;font-size:.84rem}
+		.cr-actions{display:flex;gap:.4rem;flex-wrap:wrap;margin-top:.6rem;align-items:center}
+		.cr-group{margin:1.2rem 0}
+		.cr-group-head{font-size:.9rem;margin:.5rem 0}
+		.cr-count{color:#5b6572;font-size:.85rem}
+		</style>';
+
+		// Assign a standard tube. Length & bend profile come from the chosen tube;
+		// only the quantity is set here (all tubes are standard tubes now).
+		echo '<div class="cr-add"><h3>Assign a tube</h3>';
+		wheeliams_form('bom_tubes.html');
+		echo '</div>';
 
 		// Total tube count across direct + inherited.
 		$totalQty = 0;
@@ -2593,14 +2786,6 @@ SVG;
 			}
 		}
 
-		echo '<div class="cr-add split">';
-		echo '<div><h3>Add a standard tube</h3>';
-		wheeliams_form('bom_tubes.html');
-		echo '</div>';
-		echo '<div><h3>Add a manual tube</h3>';
-		wheeliams_form('bom_tube_manual.html');
-		echo '</div>';
-		echo '</div>';
 	}
 
 	function wheeliams_bom_rollup($node){
@@ -2947,18 +3132,22 @@ GRAPHQL;
 		$series = strtoupper($prefix.$componentType);
 		$key    = 'part:'.$series;
 
+		// Continue the sequence from the highest number ACTUALLY present in this
+		// series, so a new part follows straight on from the existing/imported
+		// data (after A02-1534 comes A02-1535). A stored counter was used before,
+		// but it drifted far ahead of the real data when test parts were created
+		// and later deleted (deletes never decremented it), so new parts jumped to
+		// e.g. A02-4588 and "went missing" from where staff looked for them. The
+		// live MAX is the source of truth; the counter row is kept only as a cache.
+		$maxRow = $db->get_row(
+			"SELECT MAX(CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(partCode,'-',2),'-',-1) AS UNSIGNED)) AS m "
+			."FROM perch3_wheeliams_components WHERE type='manufactured' AND partCode LIKE ".$db->pdb($series.'-%'));
+		$next = (($maxRow && $maxRow['m'] !== null) ? (int)$maxRow['m'] : 0) + 1;
+
 		$row = $db->get_row('SELECT cval FROM perch3_wheeliams_counters WHERE ckey='.$db->pdb($key));
 		if($row){
-			$next = (int)$row['cval'] + 1;
 			$db->execute('UPDATE perch3_wheeliams_counters SET cval='.(int)$next.' WHERE ckey='.$db->pdb($key));
 		}else{
-			// Seed from the highest existing number in this series so we continue the
-			// sequence rather than clashing with part codes already in the table.
-			$maxRow = $db->get_row(
-				"SELECT MAX(CAST(SUBSTRING_INDEX(SUBSTRING_INDEX(partCode,'-',2),'-',-1) AS UNSIGNED)) AS m "
-				."FROM perch3_wheeliams_components WHERE partCode LIKE ".$db->pdb($series.'-%'));
-			$base = ($maxRow && $maxRow['m'] !== null) ? (int)$maxRow['m'] : 0;
-			$next = $base + 1;
 			$db->insert('perch3_wheeliams_counters', array('ckey' => $key, 'cval' => $next));
 		}
 		return str_pad($next, 4, '0', STR_PAD_LEFT);

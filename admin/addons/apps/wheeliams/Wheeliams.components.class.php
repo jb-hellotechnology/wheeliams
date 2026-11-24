@@ -142,23 +142,28 @@ class Wheeliams_Components extends PerchAPI_Factory
 		return $this->db->execute('DELETE FROM perch3_wheeliams_components_suppliers_price WHERE wheeliams_components_suppliers_priceID='.(int)$priceID);
 	}
 	
-	public function componentPrice($componentID,$supplierID,$price,$costDate=null){
+	public function componentPrice($componentID,$supplierID,$price,$costDate=null,$note=''){
 
 		$this->ensurePriceColumns();
 		// Cost date defaults to today but can be back-dated by the user.
 		$costDate = ($costDate && strtotime($costDate)) ? date('Y-m-d', strtotime($costDate)) : date('Y-m-d');
 
-		$sql = 'INSERT INTO perch3_wheeliams_components_suppliers_price (supplierID, componentID, price, cost_date) VALUES ('
-			.$this->db->pdb((int)$supplierID).', '.$this->db->pdb((int)$componentID).', '.$this->db->pdb($price).', '.$this->db->pdb($costDate).')';
+		$sql = 'INSERT INTO perch3_wheeliams_components_suppliers_price (supplierID, componentID, price, cost_date, cost_note) VALUES ('
+			.$this->db->pdb((int)$supplierID).', '.$this->db->pdb((int)$componentID).', '.$this->db->pdb($price).', '.$this->db->pdb($costDate).', '.$this->db->pdb((string)$note).')';
 		return $this->db->execute($sql);
 
 	}
 
 	/* Add columns introduced after the price table first shipped. */
 	protected function ensurePriceColumns(){
-		$exists = $this->db->get_row("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='perch3_wheeliams_components_suppliers_price' AND COLUMN_NAME='cost_date'");
-		if(!$exists){
-			$this->db->execute("ALTER TABLE perch3_wheeliams_components_suppliers_price ADD COLUMN cost_date DATE DEFAULT NULL");
+		foreach(array(
+			'cost_date' => 'DATE DEFAULT NULL',
+			'cost_note' => 'VARCHAR(500) DEFAULT NULL',
+		) as $col => $def){
+			$exists = $this->db->get_row("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='perch3_wheeliams_components_suppliers_price' AND COLUMN_NAME='".$col."'");
+			if(!$exists){
+				$this->db->execute("ALTER TABLE perch3_wheeliams_components_suppliers_price ADD COLUMN ".$col." ".$def);
+			}
 		}
 	}
 	
@@ -197,13 +202,53 @@ class Wheeliams_Components extends PerchAPI_Factory
 	}
 	
 	public function setCurrentSupplier($componentID, $supplierID){
-		
+
 		$sql = 'UPDATE perch3_wheeliams_components_suppliers SET current=0 WHERE perch3_wheeliams_componentID='.$componentID;
 		$data = $this->db->execute($sql);
-		
+
 		$sql = 'UPDATE perch3_wheeliams_components_suppliers SET current=1 WHERE perch3_wheeliams_componentID='.$componentID.' AND wheeliams_supplierID='.$supplierID;
 		$data = $this->db->execute($sql);
-		
+
 	}
-	
+
+	/* Every component linked to a given supplier (for the "find components by
+	   supplier" look-up), newest-linked first, with the link's current flag. */
+	public function componentsBySupplier($supplierID){
+		$sql = 'SELECT c.*, cs.current AS cs_current '
+			.'FROM perch3_wheeliams_components c '
+			.'JOIN perch3_wheeliams_components_suppliers cs ON cs.perch3_wheeliams_componentID = c.perch3_wheeliams_componentID '
+			.'WHERE cs.wheeliams_supplierID='.(int)$supplierID.' '
+			.'ORDER BY c.type ASC, c.partCode ASC';
+		return $this->db->get_rows($sql);
+	}
+
+	/* Current supplier name + the effective latest cost for a component.
+	   Effective cost = the current supplier's most recent price; if that is
+	   nil/zero (e.g. a new supplier awaiting a quote) fall back to the most
+	   recent price from ANY supplier, so lists and BOMs still show a value.
+	   Returns ['supplierID'=>int|null, 'name'=>string, 'price'=>float|null]. */
+	public function currentSupplierInfo($componentID){
+		$componentID = (int)$componentID;
+		$cur = $this->db->get_row(
+			'SELECT cs.wheeliams_supplierID, s.name FROM perch3_wheeliams_components_suppliers cs '
+			.'LEFT JOIN perch3_wheeliams_suppliers s ON s.wheeliams_supplierID = cs.wheeliams_supplierID '
+			.'WHERE cs.perch3_wheeliams_componentID='.$componentID
+			.' ORDER BY cs.current DESC, cs.wheeliams_components_suppliersID DESC LIMIT 1');
+		$name  = $cur['name'] ?? '';
+		$price = null;
+		if($cur){
+			$p = $this->getComponentPrice($componentID, (int)$cur['wheeliams_supplierID']);
+			if($p !== null && (float)$p > 0) $price = (float)$p;
+		}
+		if($price === null){
+			$latest = $this->latestComponentPrice($componentID);
+			if($latest && (float)$latest['price'] > 0) $price = (float)$latest['price'];
+		}
+		return array(
+			'supplierID' => isset($cur['wheeliams_supplierID']) ? (int)$cur['wheeliams_supplierID'] : null,
+			'name'       => $name,
+			'price'      => $price,
+		);
+	}
+
 }

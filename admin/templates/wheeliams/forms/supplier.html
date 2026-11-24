@@ -20,7 +20,12 @@
 			<perch:label for="contact_last_name">Contact Last Name</perch:label>
 			<perch:input type="text" id="contact_last_name" />
 		</div>
-		
+
+		<div>
+			<perch:label for="contact_type">Contact Type</perch:label>
+			<perch:input type="select" id="contact_type" options="<perch:forms id="contact_types">" value="<perch:forms id="contact_type" />" />
+		</div>
+
 		<div>
 			<perch:label for="address_1">Address 1</perch:label>
 			<perch:input type="text" id="address_1" />
@@ -54,6 +59,12 @@
 		<div>
 			<perch:label for="email">General Email</perch:label>
 			<perch:input type="text" id="email" />
+		</div>
+
+		<div>
+			<perch:label for="website">Website</perch:label>
+			<perch:input type="url" id="website" placeholder="https://…" />
+			<perch:if exists="website"><small class="help"><a href="<perch:forms id="website" />" target="_blank" rel="noopener">Visit website &rarr;</a></small></perch:if>
 		</div>
 
 		<div>

@@ -35,7 +35,7 @@ perch_layout('header');
 			$base = '/boms/?type='.htmlspecialchars($_GET['type']).'&edit=1&id='.(int)$_GET['id'];
 			echo '<nav class="bom-tabs">';
 			echo '<a class="'.($crTab==='bom'?'active':'').'" href="'.$base.'">'.($type==='manufactured'?'Component BOM':'Kit BOM').'</a>';
-			echo '<a class="'.($crTab==='cutting'?'active':'').'" href="'.$base.'&tab=cutting">Cutting &amp; Rolling</a>';
+			echo '<a class="'.($crTab==='cutting'?'active':'').'" href="'.$base.'&tab=cutting">Tube Details</a>';
 			echo '<a class="'.($crTab==='notes'?'active':'').'" href="'.$base.'&tab=notes">Workshop Notes</a>';
 			echo '</nav>';
 		}
@@ -76,12 +76,10 @@ perch_layout('header');
 				wheeliams_form('bom_components.html');
 				wheeliams_form('bom_fasteners.html');
 				wheeliams_form('bom_raw-materials.html');
-				wheeliams_form('bom_tubes.html');
 			}else{
-				// Components can take fasteners, raw materials and tubes; all roll into cost.
+				// Tubes are assigned on the Tube Details tab now, not here.
 				wheeliams_form('bom_fasteners.html');
 				wheeliams_form('bom_raw-materials.html');
-				wheeliams_form('bom_tubes.html');
 			}
 			echo '</div>';
 			echo '<div>';

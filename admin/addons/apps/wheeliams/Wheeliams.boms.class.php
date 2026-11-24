@@ -158,20 +158,9 @@ class Wheeliams_Boms extends PerchAPI_Factory
 				$child['unit_qty']  = $unitQty;                          // qty per single parent (for display)
 				$child['bom_id']    = (int)$row['perch3_wheeliams_bomID']; // the BOM link row (for edit/delete)
 				$child['parent_id'] = (int)$row['id'];                     // parent componentID
-				// A rolled tube takes its length from the BOM line; recost it here.
-				if($child['type'] === 'tube'){
-					$lineLen = isset($row['tube_length']) ? (float)$row['tube_length'] : 0.0;
-					if($child['tube_is_rolled'] && $lineLen > 0){
-						$child['tube_length'] = $lineLen;
-						$child['unit_cost']   = (float)$child['tube_price_per_mm'] * $lineLen;
-					}
-					$child['line_cost'] = (float)$child['unit_cost'] * (float)$child['extended_qty'];
-					// Rolled tubes omit length from their code, so surface it on the row.
-					if($child['tube_is_rolled'] && (float)$child['tube_length'] > 0){
-						$lenLabel = rtrim(rtrim(number_format($child['tube_length'],1,'.',''), '0'), '.');
-						$child['description'] = trim($child['description'].' (L'.$lenLabel.'mm)');
-					}
-				}
+				// Tube length now lives in the tube's own spec (both shapes), so its
+				// cost comes straight from buildNode (material price/mm x spec
+				// length) -- no per-BOM-line length override any more.
 				$children[] = $child;
 			}
 		}
@@ -258,12 +247,22 @@ class Wheeliams_Boms extends PerchAPI_Factory
 			$sdyn = $s ? (json_decode($s['dynamicFields'], true) ?: array()) : array();
 			$supplierUrl = $sdyn['website'] ?? ($sdyn['url'] ?? '');
 			$unitCost = (float)$Components->getComponentPrice($componentID, $supplierID);
-			// Raw materials are purchased per stock length but used by the mm, so BOM
-			// lines are costed at price-per-usage-unit (£/mm = price ÷ stock length).
-			if($c['type'] === 'raw-materials'){
-				$stockLen = (float)($dyn['stock-length'] ?? 0);
-				if($stockLen > 0) $unitCost = $unitCost / $stockLen;
+		}
+		// Fall back to the most recent price from ANY supplier when the current
+		// supplier has no (nil) cost yet — e.g. the current supplier has just been
+		// switched and is awaiting a quote — so the BOM shows the last known cost
+		// instead of £0.00. Once the current supplier has a cost, that is used.
+		if($unitCost <= 0){
+			$latest = $Components->latestComponentPrice($componentID);
+			if($latest && (float)$latest['price'] > 0){
+				$unitCost = (float)$latest['price'];
 			}
+		}
+		// Raw materials are purchased per stock length but used by the mm, so BOM
+		// lines are costed at price-per-usage-unit (£/mm = price ÷ stock length).
+		if($c['type'] === 'raw-materials'){
+			$stockLen = (float)($dyn['stock-length'] ?? 0);
+			if($stockLen > 0) $unitCost = $unitCost / $stockLen;
 		}
 
 		// Tubes are made in-house from a raw material: cost = material £/mm × length,
@@ -271,16 +270,24 @@ class Wheeliams_Boms extends PerchAPI_Factory
 		// (set in explode()); straight tubes use the length baked into their own spec.
 		$tubePricePerMm = 0.0; $tubeIsRolled = false; $tubeLength = 0.0; $tubeMaterialCode = ''; $tubeMatID = 0;
 		if($c['type'] === 'tube'){
-			$tubeIsRolled = (($dyn['is_rolled'] ?? '') === 'ROLLED');
+			// Shape drives rolled/straight; length now lives in the tube spec for BOTH
+			// shapes (no longer per-BOM-line).
+			$shape        = $dyn['shape'] ?? '';
+			$tubeIsRolled = $shape !== '' ? ($shape !== 'STRAIGHT') : (($dyn['is_rolled'] ?? '') === 'ROLLED');
 			$tubeLength   = (float)($dyn['length'] ?? 0);
-			// Resolve the steel raw material from the tube's section + size + grade
-			// (material = a Generic Material like "MILD STEEL-S235" → grade "S235").
-			$grade = '';
-			if(!empty($dyn['material'])){ $gp = explode('-', (string)$dyn['material']); $grade = $gp[1] ?? $dyn['material']; }
-			$matPrefix = strtoupper(trim(($dyn['section'] ?? '').'-'.($dyn['size'] ?? '').'-'.$grade, '-'));
-			if($matPrefix !== '' && $matPrefix !== '-'){
-				$mrow = $this->db->get_row("SELECT perch3_wheeliams_componentID FROM perch3_wheeliams_components WHERE type='raw-materials' AND partCode LIKE ".$this->db->pdb($matPrefix.'-%')." ORDER BY partCode ASC LIMIT 1");
-				$tubeMatID = $mrow ? (int)$mrow['perch3_wheeliams_componentID'] : 0;
+			// The tube references a Raw Material component directly (new model). Fall
+			// back to the legacy section/size/grade resolution for tubes saved before
+			// the redesign.
+			if(!empty($dyn['raw_material'])){
+				$tubeMatID = (int)$dyn['raw_material'];
+			}else{
+				$grade = '';
+				if(!empty($dyn['material'])){ $gp = explode('-', (string)$dyn['material']); $grade = $gp[1] ?? $dyn['material']; }
+				$matPrefix = strtoupper(trim(($dyn['section'] ?? '').'-'.($dyn['size'] ?? '').'-'.$grade, '-'));
+				if($matPrefix !== '' && $matPrefix !== '-'){
+					$mrow = $this->db->get_row("SELECT perch3_wheeliams_componentID FROM perch3_wheeliams_components WHERE type='raw-materials' AND partCode LIKE ".$this->db->pdb($matPrefix.'-%')." ORDER BY partCode ASC LIMIT 1");
+					$tubeMatID = $mrow ? (int)$mrow['perch3_wheeliams_componentID'] : 0;
+				}
 			}
 			if($tubeMatID){
 				$mat = $Components->component($tubeMatID);
@@ -290,12 +297,14 @@ class Wheeliams_Boms extends PerchAPI_Factory
 					$matStockLen = (float)($mdyn['stock-length'] ?? 0);
 					$matSup   = $this->db->get_row('SELECT wheeliams_supplierID FROM perch3_wheeliams_components_suppliers WHERE perch3_wheeliams_componentID='.$tubeMatID.' AND current=1 LIMIT 1');
 					$matPrice = $matSup ? (float)$Components->getComponentPrice($tubeMatID, $matSup['wheeliams_supplierID']) : 0.0;
+					// Fall back to the latest price from any supplier when the current one is nil.
+					if($matPrice <= 0){ $lp = $Components->latestComponentPrice($tubeMatID); if($lp && (float)$lp['price'] > 0) $matPrice = (float)$lp['price']; }
 					if($matStockLen > 0) $tubePricePerMm = $matPrice / $matStockLen;
 				}
 			}
-			if($tubeMaterialCode === ''){ $tubeMaterialCode = $matPrefix; } // show spec when no raw material matches
+			if($tubeMaterialCode === ''){ $tubeMaterialCode = (string)($dyn['raw_material_code'] ?? ''); }
 			$supplierName = 'WHEELIAMS WORKSHOP';
-			$unitCost     = $tubePricePerMm * $tubeLength; // straight; rolled recomputed in explode()
+			$unitCost     = $tubePricePerMm * $tubeLength; // cost = material £/mm × length (both shapes)
 		}
 		$isTube = ($c['type'] === 'tube');
 

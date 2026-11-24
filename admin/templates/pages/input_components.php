@@ -97,6 +97,9 @@ perch_layout('header');
 				echo '<p><a href="/components/?type='.$_GET['type'].'" class="button back">&larr; Back</a></p>';
 			}
 		}
+	}elseif(!empty($_GET['supplier'])){
+		/* SEARCH: components by supplier name */
+		wheeliams_components_by_supplier_table((int)$_GET['supplier']);
 	}else{
 	?>
 	<h1>Configure Components</h1>
@@ -114,6 +117,7 @@ perch_layout('header');
 			<h2><a href="/components?type=tube">Tubes</a></h2>
 		</div>
 	</div>
+	<?php wheeliams_component_supplier_search(); ?>
 	<?php
 	}
 	?>
